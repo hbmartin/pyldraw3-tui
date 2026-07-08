@@ -258,6 +258,10 @@ class PyldrawTuiApp(App[None]):
     async def action_regenerate_index(self) -> None:
         """Delete the persistent index and rebuild it from the library."""
         if not await self._wait_for_catalog_load():
+            self.notify(
+                "Catalog load was cancelled; regenerate index did not run.",
+                severity="warning",
+            )
             return
         self.source.catalog_db.unlink(missing_ok=True)
         self._start_catalog_load(self.source.classify())

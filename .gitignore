@@ -14,3 +14,7 @@ wheels/
 htmlcov/
 coverage.lcov
 tests/__snapshots__/*.new.svg
+
+# Local review triage artifacts
+reviews_triage/
+triage_decisions.db

@@ -84,4 +84,3 @@ class PartsList(DataTable[str]):
         self.sort(self._column_keys[index], reverse=reverse)
         if selected is not None:
             self.focus_code(selected.code)
-            self.post_message(PartHighlighted(selected))
