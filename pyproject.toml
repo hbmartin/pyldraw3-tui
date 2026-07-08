@@ -22,15 +22,16 @@ classifiers = [
   "Topic :: Multimedia :: Graphics :: 3D Modeling",
   "Topic :: Software Development :: Libraries :: Python Modules",
 ]
+dependencies = [
+    "pyperclip>=1.11.0",
+    "textual>=8.2.8",
+]
+
 [project.urls]
 Homepage = "https://github.com/hbmartin/pyldraw3-tui"
 Repository = "https://github.com/hbmartin/pyldraw3-tui"
 Documentation = "https://github.com/hbmartin/pyldraw3-tui/blob/main/GUIDE.md"
 Changelog = "https://github.com/hbmartin/pyldraw3-tui/releases"
-dependencies = [
-    "pyperclip>=1.11.0",
-    "textual>=8.2.8",
-]
 
 [dependency-groups]
 dev = [
