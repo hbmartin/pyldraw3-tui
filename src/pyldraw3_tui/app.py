@@ -6,11 +6,11 @@ import webbrowser
 from typing import TYPE_CHECKING, ClassVar
 
 from ldraw.bom import rows_to_csv, rows_to_json
-from ldraw.errors import PartError
 from textual import work
 from textual.app import App
 from textual.binding import Binding
 from textual.widgets import Footer, Header, TabbedContent, TabPane
+from textual.worker import WorkerCancelled, WorkerFailed
 
 from pyldraw3_tui.clipboard import copy_text
 from pyldraw3_tui.commands import PyldrawTuiCommands
@@ -34,6 +34,7 @@ if TYPE_CHECKING:
 
     from ldraw.parts import CatalogEntry, Parts
     from textual.app import ComposeResult
+    from textual.worker import Worker
 
     from pyldraw3_tui.screens.help import BindingSections
 
@@ -69,6 +70,7 @@ class PyldrawTuiApp(App[None]):
         self.parts: Parts | None = None
         self.search_index: SearchIndex | None = None
         self._model_path = model_path
+        self._catalog_worker: Worker[None] | None = None
 
     def compose(self) -> ComposeResult:
         """Lay out the header, the two tabs, and the key-hint footer."""
@@ -101,21 +103,45 @@ class PyldrawTuiApp(App[None]):
         if state is SourceState.LIBRARY_MISSING:
             self.notify("LDraw library still missing.", severity="error")
             return
+        if self._catalog_load_in_progress:
+            self.notify("Catalog load already in progress.", timeout=5)
+            return
         if state is not SourceState.READY:
             self.notify(
                 "Building the parts index — the first load can take a while…",
                 timeout=10,
             )
         self.query_one("#catalog-view", CatalogView).loading = True
-        self._load_catalog()
+        self._catalog_worker = self._load_catalog()
+
+    @property
+    def _catalog_load_in_progress(self) -> bool:
+        worker = self._catalog_worker
+        return worker is not None and not worker.is_finished
+
+    async def _wait_for_catalog_load(self) -> bool:
+        if not self._catalog_load_in_progress:
+            return True
+        worker = self._catalog_worker
+        if worker is None:
+            return True
+        self.notify("Waiting for the current catalog load to finish…", timeout=5)
+        try:
+            await worker.wait()
+        except WorkerCancelled:
+            return False
+        except WorkerFailed:
+            return True
+        return True
 
     @work(thread=True, exclusive=True, group="catalog-load")
     def _load_catalog(self) -> None:
         """Load (and index) the catalog off the UI thread."""
         try:
             parts = self.source.load()
-        except (OSError, UnicodeDecodeError, PartError) as error:
-            self.call_from_thread(self._catalog_failed, str(error))
+        except Exception as error:  # noqa: BLE001
+            reason = str(error) or type(error).__name__
+            self.call_from_thread(self._catalog_failed, reason)
             return
         self.call_from_thread(self._catalog_ready, parts)
 
@@ -229,8 +255,10 @@ class PyldrawTuiApp(App[None]):
         self.query_one("#main-tabs", TabbedContent).active = "model"
         self.query_one("#model-view", ModelView).load_model(path)
 
-    def action_regenerate_index(self) -> None:
+    async def action_regenerate_index(self) -> None:
         """Delete the persistent index and rebuild it from the library."""
+        if not await self._wait_for_catalog_load():
+            return
         self.source.catalog_db.unlink(missing_ok=True)
         self._start_catalog_load(self.source.classify())
 

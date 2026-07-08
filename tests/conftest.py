@@ -6,7 +6,6 @@ from pathlib import Path
 from typing import TYPE_CHECKING
 
 import pytest
-from ldraw.catalog import load_parts
 from ldraw.config import Config
 
 from pyldraw3_tui.app import PyldrawTuiApp
@@ -34,15 +33,16 @@ def fixture_config(tmp_path: Path) -> Config:
 @pytest.fixture
 def parts(fixture_config: Config) -> Parts:
     """Return a fully categorized Parts over the fixture library."""
-    parts_lst = Path(fixture_config.ldraw_library_path) / "ldraw" / "parts.lst"
-    generated = Path(fixture_config.generated_path)
-    generated.mkdir(parents=True, exist_ok=True)
-    return load_parts(parts_lst, generated, build_index=True)
+    return CatalogSource(config=fixture_config).load()
 
 
 @pytest.fixture
-def make_app(fixture_config: Config) -> Callable[..., PyldrawTuiApp]:
+def make_app(
+    fixture_config: Config,
+    monkeypatch: pytest.MonkeyPatch,
+) -> Callable[..., PyldrawTuiApp]:
     """Return a factory building the app against the fixture library."""
+    monkeypatch.delenv("NO_COLOR", raising=False)
 
     def factory(model_path: Path | None = None) -> PyldrawTuiApp:
         app = PyldrawTuiApp(

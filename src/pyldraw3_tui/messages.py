@@ -28,6 +28,16 @@ class CategoryScope:
     minifig_section: MinifigSection | None = None
     minifig_only: bool = False
 
+    def __post_init__(self) -> None:
+        selected = (
+            self.category is not None,
+            self.minifig_section is not None,
+            self.minifig_only,
+        )
+        if sum(selected) > 1:
+            message = "category, minifig_section, and minifig_only are exclusive"
+            raise ValueError(message)
+
     def entries(self, catalog: PartsCatalog) -> tuple[CatalogEntry, ...]:
         """Return the catalog entries inside this scope."""
         if self.category is not None:

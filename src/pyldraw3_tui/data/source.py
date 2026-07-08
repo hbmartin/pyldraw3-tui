@@ -116,7 +116,5 @@ class CatalogSource:
         except OSError as error:
             reason = error.strerror or str(error)
             raise ModelLoadError(path=model_path, reason=reason) from error
-        except UnicodeDecodeError as error:
-            raise ModelLoadError(path=model_path, reason=str(error)) from error
-        except PartError as error:
+        except (UnicodeDecodeError, PartError) as error:
             raise ModelLoadError(path=model_path, reason=str(error)) from error

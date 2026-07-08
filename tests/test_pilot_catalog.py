@@ -2,11 +2,19 @@
 
 from __future__ import annotations
 
+from typing import Never
+
+import pytest
+from ldraw.parts import MinifigSection, PartCategory
+
 import pyldraw3_tui.app as app_module
+from pyldraw3_tui.data.source import CatalogSource
+from pyldraw3_tui.messages import CategoryScope
 from pyldraw3_tui.screens.catalog import CatalogView
 from pyldraw3_tui.screens.chooser import ChooserScreen
 from pyldraw3_tui.screens.help import HelpScreen
 from pyldraw3_tui.widgets.filter_box import FilterBox
+from pyldraw3_tui.widgets.part_detail import _metadata_text
 from pyldraw3_tui.widgets.parts_list import PartsList
 from pyldraw3_tui.widgets.subpart_tree import SubPartTree
 from tests.helpers import wait_for_catalog
@@ -21,6 +29,38 @@ async def test_catalog_loads_and_selects_first_part(make_app):
         view = app.query_one("#catalog-view", CatalogView)
         assert view.selected_entry is not None
         assert view.selected_entry.code == "3001"
+
+
+async def test_catalog_load_failure_clears_loading(fixture_config):
+    class FailingSource(CatalogSource):
+        """Catalog source that simulates an unexpected load failure."""
+
+        def load(self) -> Never:
+            """Raise an unexpected error from the worker boundary."""
+            raise RuntimeError("boom")
+
+    app = app_module.PyldrawTuiApp(source=FailingSource(config=fixture_config))
+    async with app.run_test(size=(120, 40)) as pilot:
+        await wait_for_catalog(app, pilot)
+        view = app.query_one("#catalog-view", CatalogView)
+        assert not view.loading
+
+
+def test_part_metadata_uses_library_relative_path(parts):
+    entry = parts.catalog.by_code["3001"]
+    text = _metadata_text(entry, parts.path.parent).plain
+    assert "parts/3001.dat" in text
+    assert str(parts.path.parent) not in text
+
+
+def test_category_scope_rejects_conflicting_filters():
+    with pytest.raises(ValueError, match="exclusive"):
+        CategoryScope(category=PartCategory.BRICK, minifig_only=True)
+    with pytest.raises(ValueError, match="exclusive"):
+        CategoryScope(
+            category=PartCategory.BRICK,
+            minifig_section=MinifigSection.HATS,
+        )
 
 
 async def test_filter_narrows_list(make_app):
@@ -115,6 +155,24 @@ async def test_sorting_toggles_direction(make_app):
         await pilot.pause()
         first = parts_list.get_row_at(0)
         assert first[0] == "973"
+
+
+async def test_sorting_preserves_highlighted_part(make_app):
+    app = make_app()
+    async with app.run_test(size=(120, 40)) as pilot:
+        await wait_for_catalog(app, pilot)
+        app.focus_part_in_catalog("3022")
+        await pilot.pause()
+        parts_list = app.query_one("#parts-list", PartsList)
+        parts_list.sort_by(0)
+        await pilot.pause()
+        parts_list.sort_by(0)
+        await pilot.pause()
+        view = app.query_one("#catalog-view", CatalogView)
+        assert parts_list.highlighted_entry is not None
+        assert parts_list.highlighted_entry.code == "3022"
+        assert view.selected_entry is not None
+        assert view.selected_entry.code == "3022"
 
 
 async def test_yank_copies_code(make_app, monkeypatch):

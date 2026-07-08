@@ -23,7 +23,7 @@ classifiers = [
   "Topic :: Software Development :: Libraries :: Python Modules",
 ]
 dependencies = [
-    "pyldraw3>=1.0.0",
+    "pyldraw3>=1.0.0,<2.0.0",
     "pyperclip>=1.11.0",
     "rich>=13.0.0",
     "textual>=8.2.8",
@@ -35,7 +35,7 @@ pyldraw3-tui = "pyldraw3_tui.main:main"
 [project.urls]
 Homepage = "https://github.com/hbmartin/pyldraw3-tui"
 Repository = "https://github.com/hbmartin/pyldraw3-tui"
-Documentation = "https://github.com/hbmartin/pyldraw3-tui/blob/main/GUIDE.md"
+Documentation = "https://github.com/hbmartin/pyldraw3-tui#readme"
 Changelog = "https://github.com/hbmartin/pyldraw3-tui/releases"
 
 [dependency-groups]

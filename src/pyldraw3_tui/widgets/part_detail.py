@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from pathlib import Path
 from typing import TYPE_CHECKING
 
 from rich.text import Text
@@ -17,7 +18,26 @@ if TYPE_CHECKING:
     from textual.app import ComposeResult
 
 
-def _metadata_text(entry: CatalogEntry) -> Text:
+def _library_root(parts: Parts) -> Path | None:
+    """Return the root folder that contains parts, primitives, and parts.lst."""
+    parts_lst = getattr(parts, "path", None)
+    if parts_lst is None:
+        return None
+    path = Path(parts_lst)
+    return path.parent if path.name.lower() == "parts.lst" else path
+
+
+def _display_path(path: Path, library_root: Path | None) -> str:
+    """Prefer stable library-relative paths over machine-specific absolutes."""
+    if library_root is not None:
+        try:
+            return path.relative_to(library_root).as_posix()
+        except ValueError:
+            pass
+    return str(path)
+
+
+def _metadata_text(entry: CatalogEntry, library_root: Path | None = None) -> Text:
     """Render an entry's metadata as labelled lines."""
     text = Text()
 
@@ -35,7 +55,7 @@ def _metadata_text(entry: CatalogEntry) -> Text:
     if entry.keywords:
         line("keywords", ", ".join(entry.keywords))
     if entry.part is not None:
-        line("file", str(entry.part.path))
+        line("file", _display_path(Path(entry.part.path), library_root))
     if (import_line := import_snippet(entry)) is not None:
         line("import", import_line)
     return text
@@ -47,6 +67,7 @@ class PartDetail(Vertical):
     def __init__(self, *, id: str | None = None) -> None:  # noqa: A002 - Textual idiom
         super().__init__(id=id)
         self._parts: Parts | None = None
+        self._library_root: Path | None = None
         self._entry: CatalogEntry | None = None
 
     def compose(self) -> ComposeResult:
@@ -62,6 +83,7 @@ class PartDetail(Vertical):
     def set_parts(self, parts: Parts) -> None:
         """Provide the catalog: fills the palette and enables drill-down."""
         self._parts = parts
+        self._library_root = _library_root(parts)
         self.query_one("#palette-swatches", ColourSwatches).set_palette(
             parts.colours_by_code.values(),
         )
@@ -76,5 +98,5 @@ class PartDetail(Vertical):
         if entry is None:
             metadata.update("No part selected")
         else:
-            metadata.update(_metadata_text(entry))
+            metadata.update(_metadata_text(entry, self._library_root))
         self.query_one("#subpart-tree", SubPartTree).set_root_entry(entry)
