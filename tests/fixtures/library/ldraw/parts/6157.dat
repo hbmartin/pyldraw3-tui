@@ -1,0 +1,7 @@
+0 Plate 2 x 2 with Wheel Holders
+0 Name: 6157.dat
+0 !LDRAW_ORG Part
+0 !CATEGORY Plate
+0 !KEYWORDS wheel holder, axle
+1 16 0 0 0 1 0 0 0 1 0 0 0 1 3022.dat
+1 16 0 -8 -10 1 0 0 0 1 0 0 0 1 stud.dat

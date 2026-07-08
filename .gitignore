@@ -8,3 +8,9 @@ wheels/
 
 # Virtual environments
 .venv
+
+# Test artifacts
+.coverage
+htmlcov/
+coverage.lcov
+tests/__snapshots__/*.new.svg

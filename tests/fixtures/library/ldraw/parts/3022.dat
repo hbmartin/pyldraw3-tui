@@ -1,0 +1,8 @@
+0 Plate 2 x 2
+0 Name: 3022.dat
+0 !LDRAW_ORG Part
+0 !CATEGORY Plate
+0 !KEYWORDS plate, flat
+1 16 -10 -8 -10 1 0 0 0 1 0 0 0 1 stud.dat
+1 16 10 -8 -10 1 0 0 0 1 0 0 0 1 stud.dat
+1 16 0 -4 0 20 0 0 0 4 0 0 0 20 box5.dat

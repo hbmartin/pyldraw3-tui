@@ -25,6 +25,7 @@ classifiers = [
 dependencies = [
     "pyldraw3>=1.0.0",
     "pyperclip>=1.11.0",
+    "rich>=13.0.0",
     "textual>=8.2.8",
 ]
 
@@ -39,13 +40,26 @@ Changelog = "https://github.com/hbmartin/pyldraw3-tui/releases"
 
 [dependency-groups]
 dev = [
+    "deptry>=0.24.0",
     "lizard>=1.23.0",
     "pyrefly>=1.1.1",
+    "pyroma>=5.0",
     "pytest>=9.1.1",
+    "pytest-asyncio>=1.0.0",
     "pytest-cov>=7.1.0",
     "ruff>=0.15.20",
     "ty>=0.0.57",
 ]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+asyncio_mode = "auto"
+
+[tool.deptry]
+known_first_party = ["pyldraw3_tui", "tests"]
+
+[tool.pyrefly]
+search-path = ["src", "."]
 
 [tool.ruff]
 # Exclude a variety of commonly ignored directories.
