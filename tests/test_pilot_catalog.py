@@ -7,6 +7,7 @@ from pyldraw3_tui.screens.catalog import CatalogView
 from pyldraw3_tui.screens.chooser import ChooserScreen
 from pyldraw3_tui.screens.help import HelpScreen
 from pyldraw3_tui.widgets.filter_box import FilterBox
+from pyldraw3_tui.widgets.part_detail import _metadata_text
 from pyldraw3_tui.widgets.parts_list import PartsList
 from pyldraw3_tui.widgets.subpart_tree import SubPartTree
 from tests.helpers import wait_for_catalog
@@ -21,6 +22,13 @@ async def test_catalog_loads_and_selects_first_part(make_app):
         view = app.query_one("#catalog-view", CatalogView)
         assert view.selected_entry is not None
         assert view.selected_entry.code == "3001"
+
+
+def test_part_metadata_uses_library_relative_path(parts):
+    entry = parts.catalog.by_code["3001"]
+    text = _metadata_text(entry, parts.path.parent).plain
+    assert "parts/3001.dat" in text
+    assert str(parts.path.parent) not in text
 
 
 async def test_filter_narrows_list(make_app):

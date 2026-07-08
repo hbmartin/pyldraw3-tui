@@ -41,8 +41,12 @@ def parts(fixture_config: Config) -> Parts:
 
 
 @pytest.fixture
-def make_app(fixture_config: Config) -> Callable[..., PyldrawTuiApp]:
+def make_app(
+    fixture_config: Config,
+    monkeypatch: pytest.MonkeyPatch,
+) -> Callable[..., PyldrawTuiApp]:
     """Return a factory building the app against the fixture library."""
+    monkeypatch.delenv("NO_COLOR", raising=False)
 
     def factory(model_path: Path | None = None) -> PyldrawTuiApp:
         app = PyldrawTuiApp(
