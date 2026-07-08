@@ -1,0 +1,14 @@
+0 FILE main.ldr
+0 Spaceship
+0 Name: main.ldr
+0 Author: fixture
+1 4 0 0 0 1 0 0 0 1 0 0 0 1 3001.dat
+1 16 -60 0 0 1 0 0 0 1 0 0 0 1 wing.ldr
+1 16 60 0 0 -1 0 0 0 1 0 0 0 1 wing.ldr
+0 NOFILE
+0 FILE wing.ldr
+0 Wing
+0 Name: wing.ldr
+1 15 0 0 0 1 0 0 0 1 0 0 0 1 3022.dat
+1 47 20 0 0 1 0 0 0 1 0 0 0 1 3022.dat
+0 NOFILE
