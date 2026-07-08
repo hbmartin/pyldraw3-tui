@@ -93,8 +93,9 @@ class SetupScreen(Screen[None]):
                 "Generating library modules and parts index…",
             )
             generate(config=config)
-        except (OSError, ValueError) as error:
-            app.call_from_thread(self._failed, str(error))
+        except Exception as error:  # noqa: BLE001
+            reason = str(error) or type(error).__name__
+            app.call_from_thread(self._failed, reason)
             return
         app.call_from_thread(self._succeeded)
 

@@ -78,6 +78,10 @@ class PartsList(DataTable[str]):
 
     def sort_by(self, index: int) -> None:
         """Sort by a column, toggling direction on repeated calls."""
+        selected = self.highlighted_entry
         reverse = not self._sort_reverse.get(index, True)
         self._sort_reverse[index] = reverse
         self.sort(self._column_keys[index], reverse=reverse)
+        if selected is not None:
+            self.focus_code(selected.code)
+            self.post_message(PartHighlighted(selected))

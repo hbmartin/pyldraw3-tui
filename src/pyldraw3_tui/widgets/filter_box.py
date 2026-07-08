@@ -32,3 +32,9 @@ class FilterBox(Input):
     def _fire(self) -> None:
         self._debounce_timer = None
         self.post_message(FilterChanged(self.value))
+
+    def on_unmount(self) -> None:
+        """Stop pending debounce work when the input leaves the DOM."""
+        if self._debounce_timer is not None:
+            self._debounce_timer.stop()
+            self._debounce_timer = None

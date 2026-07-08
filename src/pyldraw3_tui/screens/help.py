@@ -27,6 +27,9 @@ def _as_binding(binding: BindingType) -> Binding:
             return Binding(key, action)
         case (key, action, description):
             return Binding(key, action, description)
+        case _:
+            message = f"unsupported binding shape: {binding!r}"
+            raise ValueError(message)
 
 
 def binding_sections(
