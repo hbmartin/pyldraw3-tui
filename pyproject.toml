@@ -5,7 +5,8 @@ description = "Python TUI for browsing LDraw library."
 keywords = ["ldraw", "lego", "cad", "3d", "modeling", "parts", "bricks"]
 readme = "README.md"
 requires-python = ">=3.12"
-license = {text = "GPL-3.0-or-later"}
+license = "GPL-3.0-or-later"
+license-files = ["LICENSE.txt"]
 authors = [
     { name = "Harold Martin", email = "harold.martin@gmail.com" },
 ]
