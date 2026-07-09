@@ -1,45 +1,28 @@
-"""Unit tests for true-bounds folding in the stats panel."""
+"""Unit tests for summary size formatting and pyldraw3 bounds semantics."""
 
 from __future__ import annotations
 
-from ldraw.colour import Colour
-from ldraw.geometry import Identity, Vector
-from ldraw.pieces import Piece
+from ldraw import model_bounds, read_model
 
-from pyldraw3_tui.widgets.stats_panel import _model_bounds, size_label
+from pyldraw3_tui.widgets.stats_panel import size_label
 
 
-def _piece(part: str, x: float = 0, y: float = 0, z: float = 0) -> Piece:
-    return Piece(
-        colour=Colour(4),
-        position=Vector(x, y, z),
-        matrix=Identity(),
-        part=part,
-    )
+def _components(vector) -> list[float]:
+    return [vector.x, vector.y, vector.z]
 
 
-def test_model_bounds_single_piece(parts):
-    bounds = _model_bounds([_piece("3001")], parts)
+def test_model_bounds_single_model(parts, car_ldr):
+    bounds = model_bounds(read_model(car_ldr), parts)
     assert bounds is not None
-    lows, highs = bounds
-    assert lows == [-40, -28, -20]
-    assert highs == [40, 0, 20]
+    assert _components(bounds.min) == [-40, -36, -20]
+    assert _components(bounds.max) == [60, 0, 20]
 
 
-def test_model_bounds_folds_translated_pieces(parts):
-    bounds = _model_bounds([_piece("3001"), _piece("3001", x=100)], parts)
+def test_model_bounds_uses_world_space_occurrences(parts, spaceship_mpd):
+    bounds = model_bounds(read_model(spaceship_mpd), parts)
     assert bounds is not None
-    lows, highs = bounds
-    assert lows == [-40, -28, -20]
-    assert highs == [140, 0, 20]
-
-
-def test_model_bounds_skips_unresolvable_parts(parts):
-    assert _model_bounds([_piece("no-such-part")], parts) is None
-
-
-def test_model_bounds_none_without_parts():
-    assert _model_bounds([_piece("3001")], None) is None
+    assert _components(bounds.min) == [-80, -28, -20]
+    assert _components(bounds.max) == [80, 0, 20]
 
 
 def test_size_label_converts_to_mm():

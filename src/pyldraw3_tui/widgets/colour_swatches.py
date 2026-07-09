@@ -18,7 +18,6 @@ if TYPE_CHECKING:
     from ldraw.colour import Colour
     from ldraw.parts import Parts
 
-OPAQUE_ALPHA = 255
 _SWATCH_GLYPHS = "██"
 
 
@@ -28,32 +27,24 @@ def resolve_colour(colour: Colour, parts: Parts | None) -> Colour:
     Placement colours parsed from files carry only a code; the palette
     entry adds name/rgb/alpha. Direct colours pass through unchanged.
     """
-    if colour.code is None or parts is None:
-        return colour
-    return parts.colours_by_code.get(colour.code, colour)
+    return colour if parts is None else parts.resolve_colour(colour)
 
 
 def colour_chip(colour: Colour, parts: Parts | None = None) -> Text:
     """Return a small true-colour swatch followed by the colour's label."""
     resolved = resolve_colour(colour, parts)
     chip = Text()
-    if resolved.rgb is not None:
-        chip.append(_SWATCH_GLYPHS, style=resolved.rgb)
+    if resolved.swatch_rgb is not None:
+        chip.append(_SWATCH_GLYPHS, style=resolved.swatch_rgb)
     else:
         chip.append(_SWATCH_GLYPHS, style="dim")
-    chip.append(f" {colour_label(resolved)}")
+    chip.append(f" {resolved.display_label}")
     return chip
 
 
 def colour_label(colour: Colour) -> str:
     """Return a short textual name for a colour."""
-    if colour.name is not None:
-        return colour.name
-    if colour.code is not None:
-        return str(colour.code)
-    if colour.rgb is not None:
-        return colour.rgb
-    return "?"
+    return colour.display_label
 
 
 class ColourSwatches(Static):
@@ -72,8 +63,11 @@ class ColourSwatches(Static):
             if colour.is_solid:
                 text.append(" [solid]", style="dim")
             else:
-                if colour.alpha is not None and colour.alpha < OPAQUE_ALPHA:
-                    text.append(f" (alpha {colour.alpha})", style="dim italic")
+                if colour.is_transparent:
+                    text.append(
+                        f" (alpha {colour.swatch_alpha})",
+                        style="dim italic",
+                    )
                 if colour.colour_attributes:
                     attributes = ", ".join(colour.colour_attributes)
                     text.append(f" [{attributes}]", style="dim")

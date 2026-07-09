@@ -39,7 +39,11 @@ class BomTable(DataTable[Text | str | int]):
         self.rows_data = rows
         self.clear()
         for row in rows:
-            colour = Colour(code=row.colour_code, name=row.colour_name)
+            colour = (
+                parts.resolve_colour(row.colour_code)
+                if parts is not None and row.colour_code is not None
+                else Colour(code=row.colour_code, name=row.colour_name)
+            )
             self.add_row(
                 row.part,
                 row.description or "",

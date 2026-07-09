@@ -133,8 +133,8 @@ class ModelView(Vertical):
         self.add_class("errored")
         self.query_one("#model-error", Static).update(f"[bold red]Error:[/] {message}")
         self.query_one("#model-title", Static).update("No model open")
-        self.query_one("#piece-table", PieceTable).set_pieces([], self._parts)
-        self.query_one("#stats-panel", StatsPanel).show_model([], self._parts)
+        self.query_one("#piece-table", PieceTable).set_occurrences([], self._parts)
+        self.query_one("#stats-panel", StatsPanel).update("Model has no pieces.")
         self.query_one("#bom-table", BomTable).set_rows([], self._parts)
 
     def _selected_model(self) -> Model | None:
@@ -145,32 +145,26 @@ class ModelView(Vertical):
         try:
             return self._model.submodel_view(self._selected_key)
         except UnknownSubmodelError:
+            self._selected_key = ROOT_KEY
+            select = self.query_one("#submodel-select", Select)
+            with select.prevent(Select.Changed):
+                select.value = ROOT_KEY
             return self._model
 
     def _render_model(self) -> None:
         model = self._selected_model()
         if model is None:
             return
-        pieces = list(model.iter_pieces())
         steps = model.steps
-        # Steps cover the file's own pieces; a single-step model gets no
-        # Step column values (it would just be a row of 1s).
-        step_of = (
-            {
-                id(piece): number
-                for number, step in enumerate(steps, 1)
-                for piece in step
-            }
-            if len(steps) > 1
-            else None
+        occurrences = list(
+            model.iter_occurrences(include_steps=len(steps) > 1),
         )
-        self.query_one("#piece-table", PieceTable).set_pieces(
-            pieces,
+        self.query_one("#piece-table", PieceTable).set_occurrences(
+            occurrences,
             self._parts,
-            step_of,
         )
         self.query_one("#stats-panel", StatsPanel).show_model(
-            pieces,
+            model,
             self._parts,
             steps=len(steps),
         )

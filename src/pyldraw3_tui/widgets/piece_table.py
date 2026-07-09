@@ -13,8 +13,8 @@ from pyldraw3_tui.widgets.colour_swatches import colour_chip
 if TYPE_CHECKING:
     from collections.abc import Sequence
 
+    from ldraw.model import ModelOccurrence
     from ldraw.parts import Parts
-    from ldraw.pieces import Piece
 
 
 def _coordinate(value: float) -> str:
@@ -35,31 +35,24 @@ class PieceTable(DataTable[Text | str]):
         self.zebra_stripes = True
         self.add_columns("Colour", "Code", "Description", "X", "Y", "Z", "Step")
 
-    def set_pieces(
+    def set_occurrences(
         self,
-        pieces: Sequence[Piece],
+        occurrences: Sequence[ModelOccurrence],
         parts: Parts | None,
-        step_of: dict[int, int] | None = None,
     ) -> None:
-        """Replace rows with the given pieces.
-
-        ``step_of`` maps ``id(piece)`` to its 1-based building step; pieces
-        without an entry (e.g. expanded submodel references, whose steps
-        belong to their own file) leave the Step cell blank.
-        """
+        """Replace rows with the given flattened model occurrences."""
         self.clear()
-        for piece in pieces:
-            step = step_of.get(id(piece)) if step_of is not None else None
+        for occurrence in occurrences:
             self.add_row(
-                colour_chip(piece.colour, parts),
-                piece.part,
-                _describe(piece.part, parts),
-                _coordinate(piece.position.x),
-                _coordinate(piece.position.y),
-                _coordinate(piece.position.z),
-                "" if step is None else str(step),
+                colour_chip(occurrence.colour, parts),
+                occurrence.part_code,
+                _describe(occurrence.part_code, parts),
+                _coordinate(occurrence.position.x),
+                _coordinate(occurrence.position.y),
+                _coordinate(occurrence.position.z),
+                "" if occurrence.step is None else str(occurrence.step),
             )
-        self.border_title = f"Pieces ({len(pieces)})"
+        self.border_title = f"Pieces ({len(occurrences)})"
 
 
 def _describe(code: str, parts: Parts | None) -> str:
