@@ -33,17 +33,12 @@ def resolve_colour(colour: Colour, parts: Parts | None) -> Colour:
     return parts.colours_by_code.get(colour.code, colour)
 
 
-def rgb_style(rgb: str) -> str:
-    """Return a Rich colour style for an rgb value with or without ``#``."""
-    return rgb if rgb.startswith("#") else f"#{rgb}"
-
-
 def colour_chip(colour: Colour, parts: Parts | None = None) -> Text:
     """Return a small true-colour swatch followed by the colour's label."""
     resolved = resolve_colour(colour, parts)
     chip = Text()
     if resolved.rgb is not None:
-        chip.append(_SWATCH_GLYPHS, style=rgb_style(resolved.rgb))
+        chip.append(_SWATCH_GLYPHS, style=resolved.rgb)
     else:
         chip.append(_SWATCH_GLYPHS, style="dim")
     chip.append(f" {colour_label(resolved)}")
@@ -57,7 +52,7 @@ def colour_label(colour: Colour) -> str:
     if colour.code is not None:
         return str(colour.code)
     if colour.rgb is not None:
-        return rgb_style(colour.rgb)
+        return colour.rgb
     return "?"
 
 
@@ -74,9 +69,12 @@ class ColourSwatches(Static):
                 text.append("\n")
             text.append(colour_chip(colour))
             text.append(f" {colour.code}", style="bold")
-            if colour.alpha is not None and colour.alpha < OPAQUE_ALPHA:
-                text.append(f" (alpha {colour.alpha})", style="dim italic")
-            if colour.colour_attributes:
-                attributes = ", ".join(colour.colour_attributes)
-                text.append(f" [{attributes}]", style="dim")
+            if colour.is_solid:
+                text.append(" [solid]", style="dim")
+            else:
+                if colour.alpha is not None and colour.alpha < OPAQUE_ALPHA:
+                    text.append(f" (alpha {colour.alpha})", style="dim italic")
+                if colour.colour_attributes:
+                    attributes = ", ".join(colour.colour_attributes)
+                    text.append(f" [{attributes}]", style="dim")
         self.update(text)

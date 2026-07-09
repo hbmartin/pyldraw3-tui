@@ -77,11 +77,7 @@ class SubPartTree(Tree[SubPartRef]):
         """Return the sub-part codes referenced by a part file."""
         if self._parts is None:
             return []
-        try:
-            part = self._parts.part(code=code.lower())
-        except PartError:
-            return []
-        if part is None:
+        if (part := self._parts.find_part(code=code)) is None:
             return []
         try:
             return [obj.part for obj in part.objects if isinstance(obj, Piece)]
@@ -96,10 +92,8 @@ class SubPartTree(Tree[SubPartRef]):
     def _description(self, code: str) -> str | None:
         if self._parts is None:
             return None
-        return (
-            self._parts.by_code.get(code)
-            or self._parts.by_code.get(code.lower())
-            or self._parts.primitives_by_code.get(code.lower())
+        return self._parts.description_for(code) or self._parts.primitives_by_code.get(
+            code.lower()
         )
 
     def _reference_label(self, code: str) -> Text:

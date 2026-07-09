@@ -6,7 +6,7 @@ from pathlib import Path
 from typing import TYPE_CHECKING
 
 from ldraw.bom import bill_of_materials
-from ldraw.model import Model
+from ldraw.errors import UnknownSubmodelError
 from textual import on
 from textual.containers import Horizontal, Vertical, VerticalScroll
 from textual.widgets import Select, Static, TabbedContent, TabPane
@@ -18,6 +18,7 @@ from pyldraw3_tui.widgets.stats_panel import StatsPanel
 
 if TYPE_CHECKING:
     from ldraw.bom import BomRow
+    from ldraw.model import Model
     from ldraw.parts import Parts
     from textual.app import ComposeResult
 
@@ -141,23 +142,38 @@ class ModelView(Vertical):
             return None
         if self._selected_key == ROOT_KEY:
             return self._model
-        submodel = self._model.submodels.get(self._selected_key)
-        if submodel is None:
+        try:
+            return self._model.submodel_view(self._selected_key)
+        except UnknownSubmodelError:
             return self._model
-        # Carry the root's submodel table so nested references still expand.
-        return Model(
-            name=submodel.name,
-            objects=submodel.objects,
-            submodels=dict(self._model.submodels),
-        )
 
     def _render_model(self) -> None:
         model = self._selected_model()
         if model is None:
             return
         pieces = list(model.iter_pieces())
-        self.query_one("#piece-table", PieceTable).set_pieces(pieces, self._parts)
-        self.query_one("#stats-panel", StatsPanel).show_model(pieces, self._parts)
+        steps = model.steps
+        # Steps cover the file's own pieces; a single-step model gets no
+        # Step column values (it would just be a row of 1s).
+        step_of = (
+            {
+                id(piece): number
+                for number, step in enumerate(steps, 1)
+                for piece in step
+            }
+            if len(steps) > 1
+            else None
+        )
+        self.query_one("#piece-table", PieceTable).set_pieces(
+            pieces,
+            self._parts,
+            step_of,
+        )
+        self.query_one("#stats-panel", StatsPanel).show_model(
+            pieces,
+            self._parts,
+            steps=len(steps),
+        )
         self.query_one("#bom-table", BomTable).set_rows(
             bill_of_materials(model, parts=self._parts),
             self._parts,
