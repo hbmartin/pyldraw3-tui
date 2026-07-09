@@ -4,7 +4,8 @@ from __future__ import annotations
 
 import asyncio
 import threading
-from typing import Never
+from dataclasses import dataclass, field
+from typing import TYPE_CHECKING, Never
 
 import pytest
 from ldraw.parts import MinifigSection, PartCategory
@@ -15,27 +16,33 @@ from pyldraw3_tui.messages import CategoryScope, PartHighlighted
 from pyldraw3_tui.screens.catalog import CatalogView
 from pyldraw3_tui.screens.chooser import ChooserScreen
 from pyldraw3_tui.screens.help import HelpScreen
+from pyldraw3_tui.widgets.colour_swatches import ColourSwatches
 from pyldraw3_tui.widgets.filter_box import FilterBox
 from pyldraw3_tui.widgets.part_detail import _metadata_text
 from pyldraw3_tui.widgets.parts_list import PartsList
 from pyldraw3_tui.widgets.subpart_tree import SubPartTree
 from tests.helpers import wait_for_catalog
 
+if TYPE_CHECKING:
+    from pathlib import Path
 
+
+@dataclass(slots=True)
 class BlockingCatalogSource(CatalogSource):
     """Catalog source that blocks the first load until a test releases it."""
 
-    def __init__(self, *, config, catalog_db, release) -> None:
-        super().__init__(config=config)
-        self._catalog_db = catalog_db
-        self.release = release
+    marker_db: Path
+    release: threading.Event
+    started: threading.Event = field(init=False)
+    load_calls: int = field(default=0, init=False)
+
+    def __post_init__(self) -> None:
         self.started = threading.Event()
-        self.load_calls = 0
 
     @property
-    def catalog_db(self):
+    def catalog_db(self) -> Path:
         """Return the marker index path controlled by the test."""
-        return self._catalog_db
+        return self.marker_db
 
     def classify(self):
         """Classify only from the marker index path."""
@@ -107,7 +114,7 @@ async def test_catalog_load_in_progress_notifies(fixture_config, tmp_path, monke
     marker_db.write_text("existing index")
     source = BlockingCatalogSource(
         config=fixture_config,
-        catalog_db=marker_db,
+        marker_db=marker_db,
         release=release,
     )
     app = app_module.PyldrawTuiApp(source=source)
@@ -138,7 +145,7 @@ async def test_regenerate_index_waits_for_active_catalog_load(
     marker_db.write_text("existing index")
     source = BlockingCatalogSource(
         config=fixture_config,
-        catalog_db=marker_db,
+        marker_db=marker_db,
         release=release,
     )
     app = app_module.PyldrawTuiApp(source=source)
@@ -200,6 +207,24 @@ def test_part_metadata_uses_library_relative_path(parts):
     text = _metadata_text(entry, parts.path.parent).plain
     assert "parts/3001.dat" in text
     assert str(parts.path.parent) not in text
+
+
+def test_part_metadata_includes_geometry(parts):
+    entry = parts.catalog.by_code["3001"]
+    text = _metadata_text(entry, parts.path.parent, parts).plain
+    assert "80 x 28 x 40 LDU (32.0 x 11.2 x 16.0 mm)" in text
+    assert "4 top" in text
+
+
+async def test_palette_marks_solid_colours(make_app):
+    app = make_app()
+    async with app.run_test(size=(120, 40)) as pilot:
+        await wait_for_catalog(app, pilot)
+        swatches = app.query_one("#palette-swatches", ColourSwatches)
+        lines = str(swatches.render()).splitlines()
+        solid = [line for line in lines if "[solid]" in line]
+        assert len(solid) == 4
+        assert not any("Chrome" in line or "Trans" in line for line in solid)
 
 
 def test_category_scope_rejects_conflicting_filters():
@@ -264,7 +289,7 @@ async def test_row_selection_updates_detail(make_app):
         subparts = app.query_one("#subpart-tree", SubPartTree)
         assert str(subparts.root.label).startswith("3022")
         labels = [str(child.label) for child in subparts.root.children]
-        assert any("STUD" in label for label in labels)
+        assert any("stud" in label for label in labels)
         assert any("[primitive]" in label for label in labels)
 
 
@@ -288,7 +313,7 @@ async def test_subpart_tree_drills_into_parts(make_app):
             for grandchild in child_3022.children
             if grandchild.data is not None
         ]
-        assert codes == ["STUD", "STUD", "BOX5"]
+        assert codes == ["stud", "stud", "box5"]
 
 
 async def test_sorting_toggles_direction(make_app):

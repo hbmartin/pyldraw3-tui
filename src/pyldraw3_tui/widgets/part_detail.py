@@ -5,12 +5,14 @@ from __future__ import annotations
 from pathlib import Path
 from typing import TYPE_CHECKING
 
+from ldraw.errors import NoGeometryError, PartNotFoundError
 from rich.text import Text
 from textual.containers import Vertical, VerticalScroll
 from textual.widgets import Static, TabbedContent, TabPane
 
 from pyldraw3_tui.data.snippets import import_snippet
 from pyldraw3_tui.widgets.colour_swatches import ColourSwatches
+from pyldraw3_tui.widgets.stats_panel import size_label
 from pyldraw3_tui.widgets.subpart_tree import SubPartTree
 
 if TYPE_CHECKING:
@@ -37,7 +39,26 @@ def _display_path(path: Path, library_root: Path | None) -> str:
     return str(path)
 
 
-def _metadata_text(entry: CatalogEntry, library_root: Path | None = None) -> Text:
+def _geometry_lines(entry: CatalogEntry, parts: Parts | None) -> list[tuple[str, str]]:
+    """Return size/stud metadata lines, empty when geometry is unavailable."""
+    if parts is None:
+        return []
+    try:
+        size = parts.bounding_box(entry.code).size
+        top_studs = len(parts.stud_positions(entry.code))
+    except (PartNotFoundError, NoGeometryError):
+        return []
+    lines = [("size", size_label([size.x, size.y, size.z]))]
+    if top_studs:
+        lines.append(("studs", f"{top_studs} top"))
+    return lines
+
+
+def _metadata_text(
+    entry: CatalogEntry,
+    library_root: Path | None = None,
+    parts: Parts | None = None,
+) -> Text:
     """Render an entry's metadata as labelled lines."""
     text = Text()
 
@@ -54,6 +75,8 @@ def _metadata_text(entry: CatalogEntry, library_root: Path | None = None) -> Tex
         line("minifig", entry.minifig_section.value)
     if entry.keywords:
         line("keywords", ", ".join(entry.keywords))
+    for label, value in _geometry_lines(entry, parts):
+        line(label, value)
     if entry.part is not None:
         line("file", _display_path(Path(entry.part.path), library_root))
     if (import_line := import_snippet(entry)) is not None:
@@ -98,5 +121,5 @@ class PartDetail(Vertical):
         if entry is None:
             metadata.update("No part selected")
         else:
-            metadata.update(_metadata_text(entry, self._library_root))
+            metadata.update(_metadata_text(entry, self._library_root, self._parts))
         self.query_one("#subpart-tree", SubPartTree).set_root_entry(entry)

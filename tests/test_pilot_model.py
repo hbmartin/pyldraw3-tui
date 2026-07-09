@@ -32,6 +32,19 @@ async def test_mpd_pieces_expand_submodels(make_app, spaceship_mpd):
         piece_table = app.query_one("#piece-table", PieceTable)
         # 1 brick + 2 wings x 2 plates
         assert piece_table.row_count == 5
+        # A single-step model shows no step numbers.
+        assert piece_table.get_row_at(0)[6] == ""
+
+
+async def test_building_steps_shown(make_app, car_ldr):
+    app = make_app(model_path=car_ldr)
+    async with app.run_test(size=(120, 40)) as pilot:
+        await wait_for_catalog(app, pilot)
+        piece_table = app.query_one("#piece-table", PieceTable)
+        steps = [piece_table.get_row_at(row)[6] for row in range(3)]
+        assert steps == ["1", "2", "3"]
+        stats = app.query_one("#stats-panel", StatsPanel)
+        assert "building steps  3" in str(stats.render())
 
 
 async def test_submodel_selector_switches_model(make_app, spaceship_mpd):
@@ -74,7 +87,9 @@ async def test_summary_stats(make_app, spaceship_mpd):
         rendered = str(stats.render())
         assert "pieces  5" in rendered
         assert "distinct parts  2" in rendered
-        assert "placement extents" in rendered
+        assert "building steps  1" in rendered
+        assert "bounding box  (true part geometry)" in rendered
+        assert "mm)" in rendered
 
 
 async def test_broken_model_shows_error_card(make_app, broken_ldr):

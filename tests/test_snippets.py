@@ -17,7 +17,7 @@ def test_import_snippet_for_category():
 def test_import_snippet_for_minifig_section():
     e = CatalogEntry(
         code="973",
-        description="Torso",
+        description="Minifig Torso",
         category=PartCategory.MINIFIG,
         minifig_section=MinifigSection.TORSOS,
     )

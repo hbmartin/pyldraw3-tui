@@ -9,7 +9,7 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING
 
-from ldraw.parts import PartCategory
+from ldraw.parts import PartCategory, symbol_description
 from ldraw.utils import camel, clean
 
 if TYPE_CHECKING:
@@ -24,7 +24,7 @@ def import_snippet(entry: CatalogEntry) -> str | None:
     Parts in the OTHER category have no generated module, so there is
     nothing to import.
     """
-    symbol = clean(camel(entry.description))
+    symbol = clean(camel(symbol_description(entry.description)))
     if entry.minifig_section is not None:
         module = f"ldraw.library.parts.minifig.{entry.minifig_section.value}"
     elif entry.category is not PartCategory.OTHER:

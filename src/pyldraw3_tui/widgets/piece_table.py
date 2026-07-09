@@ -33,12 +33,23 @@ class PieceTable(DataTable[Text | str]):
         """Configure columns and row-based cursor."""
         self.cursor_type = "row"
         self.zebra_stripes = True
-        self.add_columns("Colour", "Code", "Description", "X", "Y", "Z")
+        self.add_columns("Colour", "Code", "Description", "X", "Y", "Z", "Step")
 
-    def set_pieces(self, pieces: Sequence[Piece], parts: Parts | None) -> None:
-        """Replace rows with the given pieces."""
+    def set_pieces(
+        self,
+        pieces: Sequence[Piece],
+        parts: Parts | None,
+        step_of: dict[int, int] | None = None,
+    ) -> None:
+        """Replace rows with the given pieces.
+
+        ``step_of`` maps ``id(piece)`` to its 1-based building step; pieces
+        without an entry (e.g. expanded submodel references, whose steps
+        belong to their own file) leave the Step cell blank.
+        """
         self.clear()
         for piece in pieces:
+            step = step_of.get(id(piece)) if step_of is not None else None
             self.add_row(
                 colour_chip(piece.colour, parts),
                 piece.part,
@@ -46,6 +57,7 @@ class PieceTable(DataTable[Text | str]):
                 _coordinate(piece.position.x),
                 _coordinate(piece.position.y),
                 _coordinate(piece.position.z),
+                "" if step is None else str(step),
             )
         self.border_title = f"Pieces ({len(pieces)})"
 
@@ -53,4 +65,4 @@ class PieceTable(DataTable[Text | str]):
 def _describe(code: str, parts: Parts | None) -> str:
     if parts is None:
         return ""
-    return parts.by_code.get(code) or parts.by_code.get(code.lower()) or ""
+    return parts.description_for(code) or ""
