@@ -2,17 +2,17 @@
 
 from __future__ import annotations
 
-from pathlib import Path
 from typing import TYPE_CHECKING
 
-from ldraw import generate
-from ldraw.downloads import COMPLETE_VERSION, cache_ldraw, download
+from ldraw import ensure_library
+from ldraw.downloads import COMPLETE_VERSION
 from textual import on, work
 from textual.containers import Vertical
 from textual.screen import Screen
 from textual.widgets import Button, Footer, LoadingIndicator, Static
 
 if TYPE_CHECKING:
+    from ldraw import ProgressEvent
     from textual.app import ComposeResult
 
     from pyldraw3_tui.data.source import CatalogSource
@@ -25,8 +25,19 @@ _PROBLEM = (
 )
 
 
+def _progress_message(event: ProgressEvent) -> str:
+    """Format a pyldraw3 progress event for the single-line status label."""
+    if event.total and event.current is not None:
+        current = event.current / 1024 / 1024
+        total = event.total / 1024 / 1024
+        return f"{event.message}: {current:.0f}/{total:.0f} MB"
+    if event.path is not None:
+        return f"{event.message}: {event.path.name}"
+    return event.message
+
+
 class SetupScreen(Screen[None]):
-    """Shown when ``parts.lst`` is missing; runs download + generate."""
+    """Shown when ``parts.lst`` is missing; runs pyldraw3 setup."""
 
     DEFAULT_CSS = """
     SetupScreen {
@@ -57,7 +68,7 @@ class SetupScreen(Screen[None]):
             yield Static("[bold]LDraw library not found[/]", id="setup-title")
             yield Static(_PROBLEM, id="setup-problem")
             yield Button(
-                "Download & generate",
+                "Download & prepare",
                 variant="primary",
                 id="setup-download",
             )
@@ -77,22 +88,20 @@ class SetupScreen(Screen[None]):
 
     @work(thread=True, exclusive=True, group="setup")
     def _download_and_generate(self) -> None:
-        """Run the blocking download + generate off the UI thread."""
+        """Run the blocking setup flow off the UI thread."""
         app = self.app
+
+        def progress(event: ProgressEvent) -> None:
+            app.call_from_thread(self._status, _progress_message(event))
+
         try:
-            app.call_from_thread(
-                self._status,
-                f"Downloading LDraw {COMPLETE_VERSION!r} (~80 MB)…",
+            ensure_library(
+                config=self._source.config,
+                version=COMPLETE_VERSION,
+                write_config=True,
+                config_file=self._source.config_file,
+                on_progress=progress,
             )
-            download(show_progress=False)
-            config = self._source.config
-            config.ldraw_library_path = str(Path(cache_ldraw) / COMPLETE_VERSION)
-            config.write()
-            app.call_from_thread(
-                self._status,
-                "Generating library modules and parts index…",
-            )
-            generate(config=config)
         except Exception as error:  # noqa: BLE001
             reason = str(error) or type(error).__name__
             app.call_from_thread(self._failed, reason)

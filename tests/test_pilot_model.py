@@ -5,7 +5,7 @@ from __future__ import annotations
 from textual.widgets import Input, Select, Static, TabbedContent
 
 import pyldraw3_tui.app as app_module
-from pyldraw3_tui.screens.model import ModelView
+from pyldraw3_tui.screens.model import ROOT_KEY, ModelView
 from pyldraw3_tui.widgets.bom_table import BomTable
 from pyldraw3_tui.widgets.piece_table import PieceTable
 from pyldraw3_tui.widgets.stats_panel import StatsPanel
@@ -58,6 +58,27 @@ async def test_submodel_selector_switches_model(make_app, spaceship_mpd):
         assert piece_table.row_count == 2
         model_view = app.query_one("#model-view", ModelView)
         assert len(model_view.bom_rows) == 2
+
+
+async def test_invalid_submodel_selection_resets_to_root(make_app, spaceship_mpd):
+    app = make_app(model_path=spaceship_mpd)
+    async with app.run_test(size=(120, 40)) as pilot:
+        await wait_for_catalog(app, pilot)
+        select = app.query_one("#submodel-select", Select)
+        select.value = "wing.ldr"
+        await pilot.pause()
+        assert select.value == "wing.ldr"
+
+        model_view = app.query_one("#model-view", ModelView)
+        model_view._selected_key = "missing.ldr"  # noqa: SLF001
+        model_view._render_model()  # noqa: SLF001
+        await pilot.pause()
+
+        piece_table = app.query_one("#piece-table", PieceTable)
+        assert model_view._selected_key == ROOT_KEY  # noqa: SLF001
+        assert select.value == ROOT_KEY
+        assert piece_table.row_count == 5
+        assert len(model_view.bom_rows) == 3
 
 
 async def test_bom_rows_and_csv_copy(make_app, spaceship_mpd, monkeypatch):

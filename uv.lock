@@ -396,8 +396,8 @@ wheels = [
 
 [[package]]
 name = "pyldraw3"
-version = "1.1.0"
-source = { registry = "https://pkgs.safetycli.com/repository/independent-3c890/pypi/simple/" }
+version = "1.2.0"
+source = { registry = "https://pypi.org/simple" }
 dependencies = [
     { name = "numpy" },
     { name = "platformdirs" },
@@ -406,9 +406,9 @@ dependencies = [
     { name = "pyyaml" },
     { name = "requests" },
 ]
-sdist = { url = "https://pkgs.safetycli.com/package/independent-3c890/pypi/packages/51/79/1083452709d92a7441464e7ddc16ceb9dda1d120644e0c8070ba07974e41/pyldraw3-1.1.0.tar.gz", hash = "sha256:b724ff8f5ea358ab82b6a8a18a49ed0c3e9c09186c91746eccc088d0e204b061", size = 56476, upload-time = "2026-07-09T04:28:31.509Z" }
+sdist = { url = "https://files.pythonhosted.org/packages/77/70/f51f6784d960f0ddfc6d816d6c1e30e0519d93234d310931df63dd02e631/pyldraw3-1.2.0.tar.gz", hash = "sha256:f2f96133d8459fb44930991493bd024d201019f812a921261aea3f777e6d92d2", size = 63255, upload-time = "2026-07-09T16:26:52.42Z" }
 wheels = [
-    { url = "https://pkgs.safetycli.com/package/independent-3c890/pypi/packages/eb/c9/417c03f3b1419613155419e3c7ab3022f04a55158e36372fd5048995b026/pyldraw3-1.1.0-py3-none-any.whl", hash = "sha256:c764a89e1066cbd1b3ad24224044f659bd2eb865ff42f7659c0567be4bac0bab", size = 69974, upload-time = "2026-07-09T04:28:30.028Z" },
+    { url = "https://files.pythonhosted.org/packages/6d/9b/ec2809f9b5ad74a386f55530bd519cb3047bc0af1288a8d0f8bf0fec451f/pyldraw3-1.2.0-py3-none-any.whl", hash = "sha256:d429a626519be9142af3c691ce336145da585447597c15303b830d52628dce11", size = 78506, upload-time = "2026-07-09T16:26:51.184Z" },
 ]
 
 [[package]]
@@ -437,7 +437,7 @@ dev = [
 
 [package.metadata]
 requires-dist = [
-    { name = "pyldraw3", specifier = ">=1.1.0" },
+    { name = "pyldraw3", specifier = ">=1.2.0" },
     { name = "pyperclip", specifier = ">=1.11.0" },
     { name = "rich", specifier = ">=13.0.0" },
     { name = "textual", specifier = ">=8.2.8" },

@@ -53,10 +53,10 @@ def test_code_snippet():
     assert code_snippet(e) == '"3001"'
 
 
-def test_import_matches_cli_suggestion(parts):
-    """The import snippet must agree with pyldraw3's own CLI suggestion."""
-    from ldraw.cli import _suggested_import
+def test_import_matches_public_suggestion(parts):
+    """The import snippet must agree with pyldraw3's public helper."""
+    from ldraw.snippets import suggested_import
 
     for entry in parts.catalog.by_code.values():
         assert import_snippet(entry) is not None
-        assert _suggested_import(entry) == import_snippet(entry)
+        assert suggested_import(entry) == import_snippet(entry)

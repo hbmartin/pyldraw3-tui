@@ -55,7 +55,7 @@ def main(argv: list[str] | None = None) -> None:
     args = build_parser().parse_args(argv)
     config = Config.load(args.config) if args.config is not None else Config.load()
     app = PyldrawTuiApp(
-        source=CatalogSource(config=config),
+        source=CatalogSource(config=config, config_file=args.config),
         model_path=args.file,
     )
     app.run()

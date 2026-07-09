@@ -6,14 +6,14 @@ from dataclasses import dataclass, replace
 from typing import TYPE_CHECKING, ClassVar
 
 from ldraw.errors import PartError
-from ldraw.pieces import Piece
+from ldraw.parts import PartReferenceKind
 from rich.text import Text
 from textual import on
 from textual.binding import Binding
 from textual.widgets import Tree
 
 if TYPE_CHECKING:
-    from ldraw.parts import CatalogEntry, Parts
+    from ldraw.parts import CatalogEntry, PartReference, Parts
     from textual.widgets.tree import TreeNode
 
 
@@ -65,42 +65,31 @@ class SubPartTree(Tree[SubPartRef]):
             return
         node.data = replace(node.data, loaded=True)
         references = self._references(node.data.code)
-        for code in references:
+        for reference in references:
             node.add(
-                self._reference_label(code),
-                data=SubPartRef(code=code, primitive=self._is_primitive(code)),
+                self._reference_label(reference),
+                data=SubPartRef(
+                    code=reference.code,
+                    primitive=reference.kind is PartReferenceKind.PRIMITIVE,
+                ),
             )
         if not references:
             node.allow_expand = False
 
-    def _references(self, code: str) -> list[str]:
+    def _references(self, code: str) -> tuple[PartReference, ...]:
         """Return the sub-part codes referenced by a part file."""
         if self._parts is None:
-            return []
-        if (part := self._parts.find_part(code=code)) is None:
-            return []
+            return ()
         try:
-            return [obj.part for obj in part.objects if isinstance(obj, Piece)]
+            return self._parts.references_for(code)
         except (PartError, OSError, UnicodeDecodeError):
-            return []
+            return ()
 
-    def _is_primitive(self, code: str) -> bool:
-        if self._parts is None:
-            return False
-        return code.lower() in self._parts.primitives_by_code
-
-    def _description(self, code: str) -> str | None:
-        if self._parts is None:
-            return None
-        return self._parts.description_for(code) or self._parts.primitives_by_code.get(
-            code.lower()
-        )
-
-    def _reference_label(self, code: str) -> Text:
+    def _reference_label(self, reference: PartReference) -> Text:
         label = Text()
-        label.append(code, style="bold")
-        if (description := self._description(code)) is not None:
-            label.append(f" — {description}")
-        if self._is_primitive(code):
+        label.append(reference.code, style="bold")
+        if reference.description is not None:
+            label.append(f" — {reference.description}")
+        if reference.kind is PartReferenceKind.PRIMITIVE:
             label.append(" [primitive]", style="dim italic")
         return label

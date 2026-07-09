@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING
 
-from ldraw.errors import NoGeometryError, PartNotFoundError
+from ldraw import ModelSummary
 from rich.text import Text
 from textual.widgets import Static
 
@@ -13,8 +13,10 @@ from pyldraw3_tui.widgets.colour_swatches import colour_chip
 if TYPE_CHECKING:
     from collections.abc import Sequence
 
+    from ldraw.model import Model, ModelOccurrence
+    from ldraw.part_geometry_types import BoundingBox
     from ldraw.parts import Parts
-    from ldraw.pieces import Piece
+    from ldraw.pieces import Vector
 
 MM_PER_LDU = 0.4
 
@@ -30,54 +32,30 @@ def size_label(sizes: Sequence[float]) -> str:
     return f"{ldu} LDU ({mm} mm)"
 
 
-def _model_bounds(
-    pieces: Sequence[Piece],
-    parts: Parts | None,
-) -> tuple[list[float], list[float]] | None:
-    """Fold world-space part bounding boxes into whole-model bounds.
+def _components(vector: Vector) -> list[float]:
+    return [vector.x, vector.y, vector.z]
 
-    Each piece's box corners are transformed by the piece's own placement;
-    pieces whose part is unknown or draws no geometry are skipped.
-    """
-    if parts is None:
-        return None
-    lows: list[float] | None = None
-    highs: list[float] | None = None
-    for piece in pieces:
-        try:
-            box = parts.bounding_box(piece.part)
-        except (PartNotFoundError, NoGeometryError):
-            continue
-        for corner in box.corners():
-            world = piece.matrix * corner + piece.position
-            point = [world.x, world.y, world.z]
-            if lows is None or highs is None:
-                lows = list(point)
-                highs = list(point)
-                continue
-            lows = [min(lo, value) for lo, value in zip(lows, point, strict=True)]
-            highs = [max(hi, value) for hi, value in zip(highs, point, strict=True)]
-    if lows is None or highs is None:
-        return None
-    return lows, highs
+
+def _bounds_components(bounds: BoundingBox) -> tuple[list[float], list[float]]:
+    return _components(bounds.min), _components(bounds.max)
 
 
 class StatsPanel(Static):
     """Piece counts, colours used, building steps, and model bounds.
 
-    Bounds fold each piece's true part geometry (via
-    ``Parts.bounding_box``); when no piece geometry resolves, the panel
-    falls back to the min/max of piece origins.
+    Bounds come from ``ModelSummary``; when no piece geometry resolves, the
+    panel falls back to the min/max of piece origins.
     """
 
     def show_model(
         self,
-        pieces: Sequence[Piece],
+        model: Model,
         parts: Parts | None,
         steps: int | None = None,
     ) -> None:
         """Render the stats for a model's leaf pieces."""
-        if not pieces:
+        occurrences = tuple(model.iter_occurrences())
+        if not occurrences:
             self.update("Model has no pieces.")
             return
         text = Text()
@@ -88,9 +66,20 @@ class StatsPanel(Static):
             text.append(f"{label:>24}  ", style="bold dim")
             text.append(value)
 
-        colours = {piece.colour for piece in pieces}
-        line("pieces", str(len(pieces)))
-        line("distinct parts", str(len({piece.part for piece in pieces})))
+        summary = ModelSummary.from_model(model, parts) if parts is not None else None
+        colours = {occurrence.colour for occurrence in occurrences}
+        line(
+            "pieces",
+            str(summary.occurrence_count if summary is not None else len(occurrences)),
+        )
+        line(
+            "distinct parts",
+            str(
+                len(summary.part_counts)
+                if summary is not None
+                else len({occurrence.part_code for occurrence in occurrences})
+            ),
+        )
         line("distinct colours", str(len(colours)))
         for colour in sorted(
             colours,
@@ -99,16 +88,38 @@ class StatsPanel(Static):
             line("", colour_chip(colour, parts))
         if steps is not None:
             line("building steps", str(steps))
-        if (bounds := _model_bounds(pieces, parts)) is not None:
-            lows, highs = bounds
+        if summary is not None and summary.bounds is not None:
+            bounds = summary.bounds
+            lows, highs = _bounds_components(bounds)
             line("bounding box", "(true part geometry)")
             for axis, low, high in zip("xyz", lows, highs, strict=True):
                 line(axis, _extent([low, high]))
-            sizes = [high - low for low, high in zip(lows, highs, strict=True)]
-            line("size", size_label(sizes))
+            line("size", size_label(_components(bounds.size)))
         else:
+            lows, highs = _placement_bounds(occurrences, summary)
             line("placement extents", "(piece origins, not true bounds)")
-            line("x", _extent([piece.position.x for piece in pieces]))
-            line("y", _extent([piece.position.y for piece in pieces]))
-            line("z", _extent([piece.position.z for piece in pieces]))
+            for axis, low, high in zip("xyz", lows, highs, strict=True):
+                line(axis, _extent([low, high]))
+        if summary is not None and summary.skipped_geometry:
+            line("skipped geometry", str(len(summary.skipped_geometry)))
         self.update(text)
+
+
+def _placement_bounds(
+    occurrences: Sequence[ModelOccurrence],
+    summary: ModelSummary | None,
+) -> tuple[list[float], list[float]]:
+    if summary is not None and summary.origin_bounds is not None:
+        return _bounds_components(summary.origin_bounds)
+    return (
+        [
+            min(occurrence.position.x for occurrence in occurrences),
+            min(occurrence.position.y for occurrence in occurrences),
+            min(occurrence.position.z for occurrence in occurrences),
+        ],
+        [
+            max(occurrence.position.x for occurrence in occurrences),
+            max(occurrence.position.y for occurrence in occurrences),
+            max(occurrence.position.z for occurrence in occurrences),
+        ],
+    )
