@@ -1,6 +1,6 @@
 [project]
 name = "pyldraw3-tui"
-version = "0.1.0"
+version = "0.2.0"
 description = "Python TUI for browsing LDraw library."
 keywords = ["ldraw", "lego", "cad", "3d", "modeling", "parts", "bricks"]
 readme = "README.md"
