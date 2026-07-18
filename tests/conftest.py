@@ -72,3 +72,9 @@ def spaceship_mpd() -> Path:
 def broken_ldr() -> Path:
     """Path to a fixture model with an invalid line."""
     return MODELS / "broken.ldr"
+
+
+@pytest.fixture
+def warnings_ldr() -> Path:
+    """Path to a fixture model that loads fine but has validation issues."""
+    return MODELS / "warnings.ldr"

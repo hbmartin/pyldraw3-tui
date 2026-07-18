@@ -1,4 +1,4 @@
-"""Read-only model browser: pieces, summary stats, and bill of materials."""
+"""Read-only model browser: pieces, stats, bill of materials, and issues."""
 
 from __future__ import annotations
 
@@ -7,12 +7,14 @@ from typing import TYPE_CHECKING
 
 from ldraw.bom import bill_of_materials
 from ldraw.errors import UnknownSubmodelError
+from ldraw.validation import ValidationIssue, iter_ldr_issues
 from textual import on
 from textual.containers import Horizontal, Vertical, VerticalScroll
 from textual.widgets import Select, Static, TabbedContent, TabPane
 
 from pyldraw3_tui.errors import ModelLoadError
 from pyldraw3_tui.widgets.bom_table import BomTable
+from pyldraw3_tui.widgets.issues_table import IssuesTable
 from pyldraw3_tui.widgets.piece_table import PieceTable
 from pyldraw3_tui.widgets.stats_panel import StatsPanel
 
@@ -60,6 +62,7 @@ class ModelView(Vertical):
         self._source: CatalogSource | None = None
         self._parts: Parts | None = None
         self._model: Model | None = None
+        self._path: Path | None = None
         self._selected_key = ROOT_KEY
 
     def compose(self) -> ComposeResult:
@@ -80,6 +83,8 @@ class ModelView(Vertical):
                 yield StatsPanel(id="stats-panel")
             with TabPane("BOM", id="tab-bom"):
                 yield BomTable(id="bom-table")
+            with TabPane("Issues", id="tab-issues"):
+                yield IssuesTable(id="issues-table")
 
     def set_source(self, source: CatalogSource) -> None:
         """Provide the source used to open model files."""
@@ -90,6 +95,8 @@ class ModelView(Vertical):
         self._parts = parts
         if self._model is not None:
             self._render_model()
+        if self._path is not None:
+            self._render_issues()
 
     @property
     def bom_rows(self) -> list[BomRow]:
@@ -100,10 +107,12 @@ class ModelView(Vertical):
         """Open a model file and show its root model."""
         if self._source is None:
             return
+        self._path = Path(path)
         try:
-            model = self._source.open_model(Path(path))
+            model = self._source.open_model(self._path)
         except ModelLoadError as error:
             self._show_error(str(error))
+            self._render_issues()
             return
         self.remove_class("errored")
         self._model = model
@@ -120,6 +129,7 @@ class ModelView(Vertical):
             select.set_options(options)
             select.value = ROOT_KEY
         self._render_model()
+        self._render_issues()
 
     @on(Select.Changed, "#submodel-select")
     def _submodel_changed(self, event: Select.Changed) -> None:
@@ -172,3 +182,25 @@ class ModelView(Vertical):
             bill_of_materials(model, parts=self._parts),
             self._parts,
         )
+
+    def _render_issues(self) -> None:
+        """Validate the open file and show the issues, whole file at once.
+
+        Validation covers the file (all submodels), not the selected
+        submodel, so this runs on load — and also for files that failed
+        to parse, where the issue list explains what is wrong.
+        """
+        if self._path is None:
+            return
+        try:
+            issues = list(iter_ldr_issues(self._path, self._parts))
+        except (OSError, UnicodeDecodeError) as error:
+            issues = [
+                ValidationIssue(
+                    line_number=0,
+                    message=f"could not re-read file: {error}",
+                ),
+            ]
+        self.query_one("#issues-table", IssuesTable).set_issues(issues)
+        tabs = self.query_one("#model-tabs", TabbedContent)
+        tabs.get_tab("tab-issues").label = f"Issues ({len(issues)})"

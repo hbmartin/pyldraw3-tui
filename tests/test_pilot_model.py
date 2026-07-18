@@ -7,6 +7,7 @@ from textual.widgets import Input, Select, Static, TabbedContent
 import pyldraw3_tui.app as app_module
 from pyldraw3_tui.screens.model import ROOT_KEY, ModelView
 from pyldraw3_tui.widgets.bom_table import BomTable
+from pyldraw3_tui.widgets.issues_table import IssuesTable
 from pyldraw3_tui.widgets.piece_table import PieceTable
 from pyldraw3_tui.widgets.stats_panel import StatsPanel
 from tests.helpers import wait_for_catalog
@@ -120,7 +121,50 @@ async def test_broken_model_shows_error_card(make_app, broken_ldr):
         model_view = app.query_one("#model-view", ModelView)
         assert model_view.has_class("errored")
         error = app.query_one("#model-error", Static)
-        assert "broken.ldr" in str(error.render())
+        assert "broken.ldr:2" in str(error.render())
+
+
+async def test_clean_model_shows_zero_issues(make_app, spaceship_mpd):
+    app = make_app(model_path=spaceship_mpd)
+    async with app.run_test(size=(120, 40)) as pilot:
+        await wait_for_catalog(app, pilot)
+        assert app.query_one("#issues-table", IssuesTable).row_count == 0
+        tabs = app.query_one("#model-tabs", TabbedContent)
+        assert str(tabs.get_tab("tab-issues").label) == "Issues (0)"
+
+
+async def test_issues_tab_lists_validation_problems(make_app, warnings_ldr):
+    app = make_app(model_path=warnings_ldr)
+    async with app.run_test(size=(120, 40)) as pilot:
+        await wait_for_catalog(app, pilot)
+        issues_table = app.query_one("#issues-table", IssuesTable)
+        assert issues_table.row_count == 4
+        rows = [issues_table.get_row_at(row) for row in range(4)]
+        assert [row[0] for row in rows] == ["3", "4", "5", "6"]
+        assert [str(row[1]) for row in rows] == [
+            "warning",
+            "warning",
+            "error",
+            "error",
+        ]
+        messages = [str(row[2]) for row in rows]
+        assert "unknown meta-command !MYEDITOR" in messages[0]
+        assert "not orthonormal" in messages[1]
+        assert "unknown colour code 99" in messages[2]
+        assert "unknown part 9999.dat" in messages[3]
+        tabs = app.query_one("#model-tabs", TabbedContent)
+        assert str(tabs.get_tab("tab-issues").label) == "Issues (4)"
+
+
+async def test_unparseable_model_still_lists_issues(make_app, broken_ldr):
+    app = make_app(model_path=broken_ldr)
+    async with app.run_test(size=(120, 40)) as pilot:
+        await wait_for_catalog(app, pilot)
+        issues_table = app.query_one("#issues-table", IssuesTable)
+        assert issues_table.row_count == 1
+        row = issues_table.get_row_at(0)
+        assert row[0] == "2"
+        assert "Line type subfile" in str(row[2])
 
 
 async def test_open_model_prompt_loads_model(make_app, car_ldr):

@@ -71,3 +71,12 @@ async def test_snapshot_model_bom(make_app, spaceship_mpd):
         app.query_one("#model-tabs", TabbedContent).active = "tab-bom"
         await pilot.pause()
         _check(app, "model_bom")
+
+
+async def test_snapshot_model_issues(make_app, warnings_ldr):
+    app = make_app(model_path=warnings_ldr)
+    async with app.run_test(size=SIZE) as pilot:
+        await wait_for_catalog(app, pilot)
+        app.query_one("#model-tabs", TabbedContent).active = "tab-issues"
+        await pilot.pause()
+        _check(app, "model_issues")

@@ -223,7 +223,7 @@ async def test_palette_marks_solid_colours(make_app):
         swatches = app.query_one("#palette-swatches", ColourSwatches)
         lines = str(swatches.render()).splitlines()
         solid = [line for line in lines if "[solid]" in line]
-        assert len(solid) == 4
+        assert len(solid) == 5
         assert not any("Chrome" in line or "Trans" in line for line in solid)
 
 

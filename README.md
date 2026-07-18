@@ -18,6 +18,7 @@ fast, without leaving your terminal.
 
 - 🔎 Look up a part code or description in seconds — no browser, no 3D viewer.
 - 📖 Read any `.ldr`/`.mpd` model's pieces, bounding box, and bill of materials as plain text.
+- 🔍 Validate model files — unknown parts and colours, malformed lines, and suspicious transforms.
 - 🎨 Preview the full LDraw colour palette with swatches and finish metadata.
 - 📋 Yank codes or export ready-to-paste Python snippets straight into your scripts.
 - ⌨️ Fully keyboard-driven (with mouse support), running entirely in your terminal.
@@ -121,6 +122,9 @@ The app is organised around its two top tabs.
 - **Browse a model file** — open a `.ldr`/`.mpd` and read its pieces, summary stats, and bill of materials.
 - **See real geometry** — per-piece bounding boxes and stud counts, plus an overall model bounding box in LDU/mm.
 - **Follow building steps** — pieces are grouped by their `0 STEP` markers where the model defines them.
+- **Validate the file** — the Issues tab lists malformed lines, unknown parts and colours, unknown
+  meta-commands, and scaled/sheared transforms, each with its line number and severity. Files that
+  fail to parse entirely still get an issue list explaining what is wrong.
 
 ## First run
 
