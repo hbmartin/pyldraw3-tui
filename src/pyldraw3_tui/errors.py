@@ -15,10 +15,17 @@ class PyldrawTuiError(Exception):
 class ModelLoadError(PyldrawTuiError):
     """A model file could not be read or parsed."""
 
-    def __init__(self, path: Path, reason: str) -> None:
+    def __init__(
+        self,
+        path: Path,
+        reason: str,
+        line_number: int | None = None,
+    ) -> None:
         self.path = path
         self.reason = reason
-        super().__init__(f"could not load model {path}: {reason}")
+        self.line_number = line_number
+        location = str(path) if line_number is None else f"{path}:{line_number}"
+        super().__init__(f"could not load model {location}: {reason}")
 
 
 class LibraryMissingError(PyldrawTuiError):
