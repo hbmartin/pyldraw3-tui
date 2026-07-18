@@ -2,11 +2,13 @@
 
 from __future__ import annotations
 
+import sys
 from argparse import ArgumentParser
 from importlib.metadata import PackageNotFoundError, version
 from pathlib import Path
 
 from ldraw.config import Config
+from ldraw.errors import ConfigLoadError
 
 from pyldraw3_tui.app import PyldrawTuiApp
 from pyldraw3_tui.data.source import CatalogSource
@@ -53,7 +55,11 @@ def build_parser() -> ArgumentParser:
 def main(argv: list[str] | None = None) -> None:
     """Run the pyldraw3-tui application."""
     args = build_parser().parse_args(argv)
-    config = Config.load(args.config) if args.config is not None else Config.load()
+    try:
+        config = Config.load(args.config) if args.config is not None else Config.load()
+    except ConfigLoadError as error:
+        print(f"error: {error}", file=sys.stderr)
+        raise SystemExit(1) from error
     app = PyldrawTuiApp(
         source=CatalogSource(config=config, config_file=args.config),
         model_path=args.file,
