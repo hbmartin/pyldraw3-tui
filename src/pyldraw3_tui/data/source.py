@@ -97,4 +97,26 @@ class CatalogSource:
             reason = error.strerror or str(error)
             raise ModelLoadError(path=model_path, reason=reason) from error
         except (UnicodeDecodeError, PartError) as error:
-            raise ModelLoadError(path=model_path, reason=str(error)) from error
+            reason, line_number = _error_details(error)
+            raise ModelLoadError(
+                path=model_path,
+                reason=reason,
+                line_number=line_number,
+            ) from error
+
+
+def _error_details(error: UnicodeDecodeError | PartError) -> tuple[str, int | None]:
+    """Split a parse error into its bare reason and structured line number.
+
+    ``PartError.add_context`` appends `` in <source> at line <n>`` to the
+    message and mirrors it in the ``source``/``line_number`` attributes;
+    strip the textual form so the location is reported exactly once.
+    """
+    if not isinstance(error, PartError):
+        return str(error), None
+    reason = error.message
+    if error.source is not None and error.line_number is not None:
+        reason = reason.removesuffix(
+            f" in {error.source} at line {error.line_number}",
+        )
+    return reason, error.line_number

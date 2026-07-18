@@ -79,4 +79,8 @@ def test_open_model_missing_file(source: CatalogSource, tmp_path: Path):
 def test_open_model_parse_error(source: CatalogSource, broken_ldr: Path):
     with pytest.raises(ModelLoadError) as excinfo:
         source.open_model(broken_ldr)
-    assert "broken.ldr" in str(excinfo.value)
+    error = excinfo.value
+    assert error.line_number == 2
+    assert "broken.ldr:2" in str(error)
+    # The location comes from the structured attributes, not the message.
+    assert "at line 2" not in str(error)
