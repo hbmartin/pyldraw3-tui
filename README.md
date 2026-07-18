@@ -25,8 +25,37 @@ fast, without leaving your terminal.
 > **Status:** Beta (v0.1.0). Usable day-to-day; interfaces and key bindings may still change
 > between releases. Bug reports and feedback are very welcome.
 
+## Screenshots
+
+<table>
+  <tr>
+    <td align="center">
+      <a href="docs/screenshots/catalog.svg"><img src="docs/screenshots/catalog.svg" alt="Catalog tab: category tree, parts list, and part detail pane" width="420"></a>
+      <br><sub><b>Catalog</b> — browse categories, filter parts, inspect metadata</sub>
+    </td>
+    <td align="center">
+      <a href="docs/screenshots/part-detail.svg"><img src="docs/screenshots/part-detail.svg" alt="Part detail pane showing the drillable sub-part reference tree" width="420"></a>
+      <br><sub><b>Part detail</b> — drillable sub-part reference tree</sub>
+    </td>
+  </tr>
+  <tr>
+    <td align="center">
+      <a href="docs/screenshots/model-pieces.svg"><img src="docs/screenshots/model-pieces.svg" alt="Model tab: pieces table for a multi-model MPD file" width="420"></a>
+      <br><sub><b>Model pieces</b> — every placement with its colour and position</sub>
+    </td>
+    <td align="center">
+      <a href="docs/screenshots/model-summary.svg"><img src="docs/screenshots/model-summary.svg" alt="Model summary: piece counts, colour swatches, and real bounding box in LDU and mm" width="420"></a>
+      <br><sub><b>Model summary</b> — counts, colours, and a real bounding box in LDU/mm</sub>
+    </td>
+  </tr>
+</table>
+
+<sub>Captured against the small test-fixture library (regenerate with
+`uv run python scripts/make_screenshots.py`); a real install browses the full LDraw catalog.</sub>
+
 ## Contents
 
+- [Screenshots](#screenshots)
 - [Installation](#installation)
 - [Usage](#usage)
 - [Features](#features)
