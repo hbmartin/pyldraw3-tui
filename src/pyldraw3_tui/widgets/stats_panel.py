@@ -11,7 +11,7 @@ from textual.widgets import Static
 from pyldraw3_tui.widgets.colour_swatches import colour_chip
 
 if TYPE_CHECKING:
-    from collections.abc import Sequence
+    from collections.abc import Callable, Sequence
 
     from ldraw.model import Model, ModelOccurrence
     from ldraw.part_geometry_types import BoundingBox
@@ -88,21 +88,28 @@ class StatsPanel(Static):
             line("", colour_chip(colour, parts))
         if steps is not None:
             line("building steps", str(steps))
-        if summary is not None and summary.bounds is not None:
-            bounds = summary.bounds
-            lows, highs = _bounds_components(bounds)
-            line("bounding box", "(true part geometry)")
-            for axis, low, high in zip("xyz", lows, highs, strict=True):
-                line(axis, _extent([low, high]))
-            line("size", size_label(_components(bounds.size)))
-        else:
-            lows, highs = _placement_bounds(occurrences, summary)
-            line("placement extents", "(piece origins, not true bounds)")
-            for axis, low, high in zip("xyz", lows, highs, strict=True):
-                line(axis, _extent([low, high]))
+        _append_bounds(line=line, occurrences=occurrences, summary=summary)
         if summary is not None and summary.skipped_geometry:
             line("skipped geometry", str(len(summary.skipped_geometry)))
         self.update(text)
+
+
+def _append_bounds(
+    line: Callable[[str, Text | str], None],
+    occurrences: Sequence[ModelOccurrence],
+    summary: ModelSummary | None,
+) -> None:
+    bounds = summary.bounds if summary is not None else None
+    if bounds is not None:
+        lows, highs = _bounds_components(bounds)
+        line("bounding box", "(true part geometry)")
+    else:
+        lows, highs = _placement_bounds(occurrences, summary)
+        line("placement extents", "(piece origins, not true bounds)")
+    for axis, low, high in zip("xyz", lows, highs, strict=True):
+        line(axis, _extent([low, high]))
+    if bounds is not None:
+        line("size", size_label(_components(bounds.size)))
 
 
 def _placement_bounds(
