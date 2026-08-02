@@ -34,7 +34,13 @@ class BomTable(DataTable[Text | str | int]):
         self.zebra_stripes = True
         self.add_columns("Code", "Description", "Colour", "Qty")
 
-    def set_rows(self, rows: list[BomRow], parts: Parts | None) -> None:
+    def set_rows(
+        self,
+        rows: list[BomRow],
+        parts: Parts | None,
+        *,
+        title: str = "Bill of materials",
+    ) -> None:
         """Replace the table contents; keeps rows for CSV/JSON export."""
         self.rows_data = rows
         self.clear()
@@ -50,4 +56,4 @@ class BomTable(DataTable[Text | str | int]):
                 colour_chip(colour, parts),
                 row.quantity,
             )
-        self.border_title = f"Bill of materials ({len(rows)} rows)"
+        self.border_title = f"{title} ({len(rows)} rows)"

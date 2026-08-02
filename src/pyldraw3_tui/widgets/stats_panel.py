@@ -54,7 +54,20 @@ class StatsPanel(Static):
         steps: int | None = None,
     ) -> None:
         """Render the stats for a model's leaf pieces."""
-        occurrences = tuple(model.iter_occurrences())
+        self.show_occurrences(
+            tuple(model.iter_occurrences()),
+            parts,
+            steps=steps,
+        )
+
+    def show_occurrences(
+        self,
+        occurrences: Sequence[ModelOccurrence],
+        parts: Parts | None,
+        *,
+        steps: int | None = None,
+    ) -> None:
+        """Render statistics for an explicit occurrence state."""
         if not occurrences:
             self.update("Model has no pieces.")
             return
@@ -66,7 +79,11 @@ class StatsPanel(Static):
             text.append(f"{label:>24}  ", style="bold dim")
             text.append(value)
 
-        summary = ModelSummary.from_model(model, parts) if parts is not None else None
+        summary = (
+            ModelSummary.from_occurrences(occurrences, parts)
+            if parts is not None
+            else None
+        )
         colours = {occurrence.colour for occurrence in occurrences}
         line(
             "pieces",
