@@ -398,6 +398,9 @@ async def test_error_load_exits_instructions_mode(
         assert model_view.has_class("errored")
         assert not model_view.has_class("instructions")
         assert app.query_one("#view-mode-select", Select).value == MODEL_MODE
+        submodel_select = app.query_one("#submodel-select", Select)
+        assert submodel_select.value is Select.NULL
+        assert submodel_select._options == [("", Select.NULL)]  # noqa: SLF001
         tabs = app.query_one("#model-tabs", TabbedContent)
         assert not tabs.get_tab("tab-pli").display
         assert not tabs.get_tab("tab-directives").display

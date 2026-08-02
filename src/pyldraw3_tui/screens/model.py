@@ -262,11 +262,15 @@ class ModelView(Vertical):
 
     def _show_error(self, message: str) -> None:
         self._model = None
+        self._selected_key = ROOT_KEY
         self._instruction_document = None
         self._selected_instruction_section = None
         self._selected_instruction_step = 1
         self._step_occurrence_counts = None
         self._step_counts_section = None
+        submodel_select = self.query_one("#submodel-select", Select)
+        with submodel_select.prevent(Select.Changed):
+            submodel_select.set_options([])
         self._view_mode = MODEL_MODE
         mode_select = self.query_one("#view-mode-select", Select)
         with mode_select.prevent(Select.Changed):
