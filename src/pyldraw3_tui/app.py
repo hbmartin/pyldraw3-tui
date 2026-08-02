@@ -202,7 +202,7 @@ class PyldrawTuiApp(App[None]):
         """Activate the Catalog or Model tab."""
         self.query_one("#main-tabs", TabbedContent).active = tab
         if tab == "model":
-            self.query_one("#piece-table", PieceTable).focus()
+            self.query_one("#piece-table", expect_type=PieceTable).focus()
 
     def action_toggle_theme(self) -> None:
         """Switch between the dark and light themes."""

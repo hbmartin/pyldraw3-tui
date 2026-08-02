@@ -315,8 +315,8 @@ class ModelView(Vertical):
             occurrences,
             self._parts,
         )
-        self.query_one("#stats-panel", StatsPanel).show_model(
-            model,
+        self.query_one("#stats-panel", StatsPanel).show_occurrences(
+            occurrences,
             self._parts,
             steps=len(steps),
         )
