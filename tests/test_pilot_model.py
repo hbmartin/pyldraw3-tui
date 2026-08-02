@@ -284,15 +284,15 @@ async def test_instruction_step_renders_cumulative_geometry_and_inventories(
         rows = [directives.get_row_at(row) for row in range(13)]
         assert {row[1] for row in rows} >= {"highlight", "arrow"}
         arrow = next(row for row in rows if row[1] == "arrow")
-        assert '"label": "Attach"' in arrow[2]
+        assert '"label": "Attach"' in arrow[2].plain
         legacy_bom = next(
             row
             for row in rows
-            if row[1] == "inventory_ignore_begin" and "BOM" in row[3]
+            if row[1] == "inventory_ignore_begin" and "BOM" in row[3].plain
         )
-        assert legacy_bom[3] == "0 LPUB BOM BEGIN IGN"
+        assert legacy_bom[3].plain == "0 LPUB BOM BEGIN IGN"
         unsupported = next(row for row in rows if row[1] == "unsupported_lpub")
-        assert unsupported[3] == "0 !LPUB SOMETHING KEEP RAW"
+        assert unsupported[3].plain == "0 !LPUB SOMETHING KEEP RAW"
 
         step_select.value = 2
         await pilot.pause()
@@ -360,6 +360,68 @@ async def test_instruction_issues_include_orphan_section(
         assert row[1] == "—"
         assert row[2].plain == "warning"
         assert row[3] == "orphan-section"
+
+
+async def test_instruction_step_keys_clamp_at_section_bounds(
+    make_app,
+    instructions_mpd,
+):
+    app = make_app(model_path=instructions_mpd)
+    async with app.run_test(size=(120, 40)) as pilot:
+        await wait_for_catalog(app, pilot)
+        await pilot.press("i")
+        step_select = app.query_one("#instruction-step-select", Select)
+        assert step_select.value == 1
+        await pilot.press("[")
+        assert step_select.value == 1
+        for _ in range(5):
+            await pilot.press("]")
+        assert step_select.value == 4
+        await pilot.press("]")
+        assert step_select.value == 4
+
+
+async def test_instruction_selection_fallback_synchronizes_step(
+    make_app,
+    instructions_mpd,
+):
+    app = make_app(model_path=instructions_mpd)
+    async with app.run_test(size=(120, 40)) as pilot:
+        await wait_for_catalog(app, pilot)
+        model_view = app.query_one("#model-view", ModelView)
+        model_view._selected_instruction_step = 999  # noqa: SLF001
+
+        selection = model_view._instruction_selection()  # noqa: SLF001
+
+        assert selection is not None
+        section, step = selection
+        assert step is section.steps[0]
+        assert model_view._selected_instruction_step == step.number  # noqa: SLF001
+
+
+async def test_error_load_exits_instructions_mode(
+    make_app,
+    instructions_mpd,
+    broken_ldr,
+):
+    app = make_app(model_path=instructions_mpd)
+    async with app.run_test(size=(120, 40)) as pilot:
+        await wait_for_catalog(app, pilot)
+        await pilot.press("i")
+        model_view = app.query_one("#model-view", ModelView)
+        assert model_view.has_class("instructions")
+
+        model_view.load_model(broken_ldr)
+        await pilot.pause()
+        assert model_view.has_class("errored")
+        assert not model_view.has_class("instructions")
+        assert app.query_one("#view-mode-select", Select).value == MODEL_MODE
+        submodel_select = app.query_one("#submodel-select", Select)
+        assert submodel_select.value is Select.NULL
+        assert submodel_select._options == [("", Select.NULL)]  # noqa: SLF001
+        tabs = app.query_one("#model-tabs", TabbedContent)
+        assert not tabs.get_tab("tab-pli").display
+        assert not tabs.get_tab("tab-directives").display
 
 
 async def test_opening_another_file_resets_and_clears_instruction_state(
