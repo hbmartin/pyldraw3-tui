@@ -48,7 +48,9 @@ class DirectivesTable(DataTable[Text | str]):
             self.add_row(
                 "—" if directive.source_line is None else str(directive.source_line),
                 directive.kind.value,
-                data,
-                directive.raw.to_ldraw(),
+                # Text keeps bracketed content (JSON arrays, user comments)
+                # literal — plain str cells go through Rich markup parsing.
+                Text(data),
+                Text(directive.raw.to_ldraw()),
             )
         self.border_title = f"Directives ({len(directives)})"

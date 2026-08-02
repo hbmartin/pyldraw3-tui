@@ -126,6 +126,8 @@ class ModelView(Vertical):
         self._instruction_document: InstructionDocument | None = None
         self._selected_instruction_section: str | None = None
         self._selected_instruction_step = 1
+        self._step_occurrence_counts: tuple[int, ...] | None = None
+        self._step_counts_section: str | None = None
 
     def compose(self) -> ComposeResult:
         """Lay out the top bar and the three tabs."""
@@ -263,6 +265,13 @@ class ModelView(Vertical):
         self._instruction_document = None
         self._selected_instruction_section = None
         self._selected_instruction_step = 1
+        self._step_occurrence_counts = None
+        self._step_counts_section = None
+        self._view_mode = MODEL_MODE
+        mode_select = self.query_one("#view-mode-select", Select)
+        with mode_select.prevent(Select.Changed):
+            mode_select.value = MODEL_MODE
+        self._sync_mode_ui()
         self.add_class("errored")
         self.query_one("#model-error", Static).update(f"[bold red]Error:[/] {message}")
         self.query_one("#model-title", Static).update("No model open")
@@ -322,11 +331,20 @@ class ModelView(Vertical):
             return
         section, step = selection
         occurrences = step.cumulative_occurrences(expand_submodels=True)
-        step_numbers = tuple(
+        counts = self._section_step_counts(section)
+        labels = tuple(
             source_step.number
-            for source_step in section.steps[: step.number]
-            for _ in source_step.added_occurrences(expand_submodels=True)
+            for source_step, count in zip(
+                section.steps[: step.number],
+                counts[: step.number],
+                strict=True,
+            )
+            for _ in range(count)
         )
+        # pyldraw3 guarantees the cumulative expansion is the ordered
+        # concatenation of each step's added occurrences; if that ever
+        # drifts, blank step labels beat crashing the render.
+        step_numbers = labels if len(labels) == len(occurrences) else None
         self.query_one("#piece-table", PieceTable).set_occurrences(
             occurrences,
             self._parts,
@@ -340,6 +358,8 @@ class ModelView(Vertical):
         self.query_one("#instruction-details", InstructionDetails).show_step(
             step,
             total_steps=len(section.steps),
+            added_count=counts[step.number - 1],
+            cumulative_count=len(occurrences),
         )
         self.query_one("#pli-table", BomTable).set_rows(
             step.added_bill_of_materials(
@@ -362,7 +382,22 @@ class ModelView(Vertical):
             step.directives,
         )
 
+    def _section_step_counts(self, section: InstructionSection) -> tuple[int, ...]:
+        """Occurrence counts added per step, computed once per section."""
+        if (
+            self._step_occurrence_counts is None
+            or self._step_counts_section != section.name
+        ):
+            self._step_occurrence_counts = tuple(
+                len(step.added_occurrences(expand_submodels=True))
+                for step in section.steps
+            )
+            self._step_counts_section = section.name
+        return self._step_occurrence_counts
+
     def _build_instruction_document(self, *, reset: bool) -> None:
+        self._step_occurrence_counts = None
+        self._step_counts_section = None
         if self._model is None:
             self._instruction_document = None
             self._clear_instruction_selectors()
@@ -421,7 +456,9 @@ class ModelView(Vertical):
         for step in section.steps:
             if step.number == self._selected_instruction_step:
                 return section, step
-        return section, section.steps[0]
+        fallback = section.steps[0]
+        self._selected_instruction_step = fallback.number
+        return section, fallback
 
     def _clear_instruction_selectors(self) -> None:
         section_select = self.query_one("#instruction-section-select", Select)

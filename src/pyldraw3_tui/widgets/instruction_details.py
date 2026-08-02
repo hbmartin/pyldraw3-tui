@@ -15,7 +15,14 @@ if TYPE_CHECKING:
 class InstructionDetails(Static):
     """Renderer-neutral rotation, camera, layout, and callout state."""
 
-    def show_step(self, step: InstructionStep, *, total_steps: int) -> None:
+    def show_step(
+        self,
+        step: InstructionStep,
+        *,
+        total_steps: int,
+        added_count: int,
+        cumulative_count: int,
+    ) -> None:
         """Render the effective semantics for one section-local step."""
         text = Text()
 
@@ -27,8 +34,8 @@ class InstructionDetails(Static):
 
         line("instruction step", f"{step.number} of {total_steps}")
         line("source lines", _source_lines(step))
-        line("added occurrences", str(len(step.added_occurrences())))
-        line("cumulative occurrences", str(len(step.cumulative_occurrences())))
+        line("added occurrences", str(added_count))
+        line("cumulative occurrences", str(cumulative_count))
         line("rotation", _rotation(step))
         line("camera", _camera(step))
         line("callouts", _callouts(step))
