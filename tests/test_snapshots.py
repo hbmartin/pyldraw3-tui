@@ -17,6 +17,8 @@ from textual.widgets import Select, TabbedContent
 from tests.helpers import wait_for_catalog
 
 if TYPE_CHECKING:
+    from collections.abc import Callable
+
     from pyldraw3_tui.app import PyldrawTuiApp
 
 SNAPSHOT_DIR = Path(__file__).parent / "__snapshots__"
@@ -83,12 +85,15 @@ async def test_snapshot_model_issues(make_app, warnings_ldr):
         _check(app, "model_issues")
 
 
-async def test_snapshot_model_instructions(make_app, instructions_mpd):
+async def test_snapshot_model_instructions(
+    make_app: Callable[..., PyldrawTuiApp],
+    instructions_mpd: Path,
+) -> None:
     app = make_app(model_path=instructions_mpd)
     async with app.run_test(size=SIZE) as pilot:
         await wait_for_catalog(app, pilot)
         await pilot.press("i")
-        app.query_one("#instruction-step-select", Select).value = 3
-        app.query_one("#model-tabs", TabbedContent).active = "tab-summary"
+        app.query_one("#instruction-step-select", expect_type=Select).value = 3
+        app.query_one("#model-tabs", expect_type=TabbedContent).active = "tab-summary"
         await pilot.pause()
         _check(app, "model_instructions")
