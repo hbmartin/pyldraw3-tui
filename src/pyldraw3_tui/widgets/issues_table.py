@@ -12,6 +12,7 @@ from textual.widgets import DataTable
 if TYPE_CHECKING:
     from collections.abc import Sequence
 
+    from ldraw.instructions import InstructionIssue
     from ldraw.validation import ValidationIssue
 
 _SEVERITY_STYLES = {
@@ -21,7 +22,7 @@ _SEVERITY_STYLES = {
 
 
 class IssuesTable(DataTable[Text | str]):
-    """Line number, severity, and message of each validation issue."""
+    """Section, line, severity, code, and message for model diagnostics."""
 
     BINDINGS: ClassVar = [
         Binding("j", "cursor_down", show=False),
@@ -32,18 +33,23 @@ class IssuesTable(DataTable[Text | str]):
         """Configure columns and row-based cursor."""
         self.cursor_type = "row"
         self.zebra_stripes = True
-        self.add_columns("Line", "Severity", "Message")
+        self.add_columns("Section", "Line", "Severity", "Code", "Message")
 
-    def set_issues(self, issues: Sequence[ValidationIssue]) -> None:
+    def set_issues(
+        self,
+        issues: Sequence[ValidationIssue | InstructionIssue],
+    ) -> None:
         """Replace rows with the given validation issues."""
         self.clear()
         for issue in issues:
             self.add_row(
-                str(issue.line_number),
+                issue.section or "—",
+                "—" if issue.line_number is None else str(issue.line_number),
                 Text(
                     issue.severity.value,
                     style=_SEVERITY_STYLES.get(issue.severity, ""),
                 ),
+                str(getattr(issue.code, "value", issue.code)),
                 issue.message,
             )
         self.border_title = f"Issues ({len(issues)})"

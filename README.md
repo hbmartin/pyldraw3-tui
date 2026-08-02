@@ -18,12 +18,13 @@ fast, without leaving your terminal.
 
 - 🔎 Look up a part code or description in seconds — no browser, no 3D viewer.
 - 📖 Read any `.ldr`/`.mpd` model's pieces, bounding box, and bill of materials as plain text.
-- 🔍 Validate model files — unknown parts and colours, malformed lines, and suspicious transforms.
+- 🧱 Follow section-local building steps, rotations, camera state, LPub inventories, and directives.
+- 🔍 Validate model files — structural diagnostics plus semantic instruction issues.
 - 🎨 Preview the full LDraw colour palette with swatches and finish metadata.
 - 📋 Yank codes or export ready-to-paste Python snippets straight into your scripts.
 - ⌨️ Fully keyboard-driven (with mouse support), running entirely in your terminal.
 
-> **Status:** Beta (v0.1.0). Usable day-to-day; interfaces and key bindings may still change
+> **Status:** Beta (v0.3.0). Usable day-to-day; interfaces and key bindings may still change
 > between releases. Bug reports and feedback are very welcome.
 
 ## Screenshots
@@ -121,10 +122,17 @@ The app is organised around its two top tabs.
 
 - **Browse a model file** — open a `.ldr`/`.mpd` and read its pieces, summary stats, and bill of materials.
 - **See real geometry** — per-piece bounding boxes and stud counts, plus an overall model bounding box in LDU/mm.
-- **Follow building steps** — pieces are grouped by their `0 STEP` markers where the model defines them.
-- **Validate the file** — the Issues tab lists malformed lines, unknown parts and colours, unknown
-  meta-commands, and scaled/sheared transforms, each with its line number and severity. Files that
-  fail to parse entirely still get an issue list explaining what is wrong.
+- **Follow semantic instructions** — switch to Instructions mode to navigate each reachable MPD
+  section's independent `STEP`/`ROTSTEP` sequence, cumulative geometry, rotation and camera state,
+  callouts, groups, page breaks, suppression, and lossless LPub/PYLDRAW directives.
+- **Inspect step inventories** — the PLI shows parts added by the selected step while the BOM shows
+  the cumulative build; LPub PLI/BOM/PART ignore ranges affect inventory without hiding geometry.
+- **Validate the file** — the Issues tab combines malformed lines, unknown parts and colours,
+  suspicious transforms, and semantic instruction problems with section, line, severity, and stable
+  issue code. Files that fail to parse entirely still get an issue list explaining what is wrong.
+
+The instruction browser is renderer-neutral and read-only. It does not generate images, PDF/HTML
+instructions, manifests, or snapshot artifacts, and it does not edit instruction metadata.
 
 ## First run
 
@@ -165,6 +173,13 @@ Windows uses the equivalent `%LOCALAPPDATA%` locations.
 | `y` / `Y` | Yank code / chooser (description, import path)           |
 | `o`       | Open selected part on ldraw.org                          |
 | `e`       | Export Python snippet (import / `Piece(...)` / bare code) |
+
+**Model instructions**
+
+| Key       | Action                                         |
+| --------- | ---------------------------------------------- |
+| `i`       | Toggle Whole model / Instructions mode         |
+| `[` / `]` | Select the previous / next section-local step  |
 
 **Global**
 

@@ -12,7 +12,7 @@ from pathlib import Path
 from typing import TYPE_CHECKING
 
 import pytest
-from textual.widgets import TabbedContent
+from textual.widgets import Select, TabbedContent
 
 from tests.helpers import wait_for_catalog
 
@@ -79,4 +79,16 @@ async def test_snapshot_model_issues(make_app, warnings_ldr):
         await wait_for_catalog(app, pilot)
         app.query_one("#model-tabs", TabbedContent).active = "tab-issues"
         await pilot.pause()
+        await pilot.pause()
         _check(app, "model_issues")
+
+
+async def test_snapshot_model_instructions(make_app, instructions_mpd):
+    app = make_app(model_path=instructions_mpd)
+    async with app.run_test(size=SIZE) as pilot:
+        await wait_for_catalog(app, pilot)
+        await pilot.press("i")
+        app.query_one("#instruction-step-select", Select).value = 3
+        app.query_one("#model-tabs", TabbedContent).active = "tab-summary"
+        await pilot.pause()
+        _check(app, "model_instructions")

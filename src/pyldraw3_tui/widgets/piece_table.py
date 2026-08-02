@@ -39,10 +39,21 @@ class PieceTable(DataTable[Text | str]):
         self,
         occurrences: Sequence[ModelOccurrence],
         parts: Parts | None,
+        *,
+        step_numbers: Sequence[int | None] | None = None,
     ) -> None:
         """Replace rows with the given flattened model occurrences."""
         self.clear()
-        for occurrence in occurrences:
+        displayed_steps = (
+            tuple(occurrence.step for occurrence in occurrences)
+            if step_numbers is None
+            else step_numbers
+        )
+        for occurrence, step_number in zip(
+            occurrences,
+            displayed_steps,
+            strict=True,
+        ):
             self.add_row(
                 colour_chip(occurrence.colour, parts),
                 occurrence.part_code,
@@ -50,7 +61,7 @@ class PieceTable(DataTable[Text | str]):
                 _coordinate(occurrence.position.x),
                 _coordinate(occurrence.position.y),
                 _coordinate(occurrence.position.z),
-                "" if occurrence.step is None else str(occurrence.step),
+                "" if step_number is None else str(step_number),
             )
         self.border_title = f"Pieces ({len(occurrences)})"
 

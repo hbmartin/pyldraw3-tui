@@ -27,6 +27,7 @@ from pyldraw3_tui.screens.setup import SetupScreen
 from pyldraw3_tui.theme import DARK_THEME, toggled_theme
 from pyldraw3_tui.widgets.category_tree import CategoryTree
 from pyldraw3_tui.widgets.parts_list import PartsList
+from pyldraw3_tui.widgets.piece_table import PieceTable
 from pyldraw3_tui.widgets.subpart_tree import SubPartTree
 
 if TYPE_CHECKING:
@@ -189,6 +190,7 @@ class PyldrawTuiApp(App[None]):
             [
                 ("Global", PyldrawTuiApp.BINDINGS),
                 ("Catalog", CatalogView.BINDINGS),
+                ("Model", ModelView.BINDINGS),
                 ("Trees", [*CategoryTree.BINDINGS, *SubPartTree.BINDINGS]),
                 ("Tables", PartsList.BINDINGS),
             ],
@@ -199,6 +201,8 @@ class PyldrawTuiApp(App[None]):
     def action_show_tab(self, tab: str) -> None:
         """Activate the Catalog or Model tab."""
         self.query_one("#main-tabs", TabbedContent).active = tab
+        if tab == "model":
+            self.query_one("#piece-table", PieceTable).focus()
 
     def action_toggle_theme(self) -> None:
         """Switch between the dark and light themes."""
@@ -267,11 +271,11 @@ class PyldrawTuiApp(App[None]):
         self._start_catalog_load(self.source.classify())
 
     def action_copy_bom_csv(self) -> None:
-        """Copy the model's bill of materials as CSV."""
+        """Copy the currently displayed bill of materials as CSV."""
         self._copy_bom(as_json=False)
 
     def action_copy_bom_json(self) -> None:
-        """Copy the model's bill of materials as JSON."""
+        """Copy the currently displayed bill of materials as JSON."""
         self._copy_bom(as_json=True)
 
     def _copy_bom(self, *, as_json: bool) -> None:

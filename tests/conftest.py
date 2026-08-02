@@ -69,6 +69,12 @@ def spaceship_mpd() -> Path:
 
 
 @pytest.fixture
+def instructions_mpd() -> Path:
+    """Path to the semantic building-instruction MPD fixture."""
+    return MODELS / "instructions.mpd"
+
+
+@pytest.fixture
 def broken_ldr() -> Path:
     """Path to a fixture model with an invalid line."""
     return MODELS / "broken.ldr"

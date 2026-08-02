@@ -50,8 +50,8 @@ class PyldrawTuiCommands(Provider):
             "export_snippet",
             "Copy an import, Piece(...), or bare-code snippet",
         )
-        yield ("Copy BOM as CSV", "copy_bom_csv", "Yank the model's BOM as CSV")
-        yield ("Copy BOM as JSON", "copy_bom_json", "Yank the model's BOM as JSON")
+        yield ("Copy BOM as CSV", "copy_bom_csv", "Yank the displayed BOM as CSV")
+        yield ("Copy BOM as JSON", "copy_bom_json", "Yank the displayed BOM as JSON")
         yield ("Help", "help", "Show the key-binding reference")
         yield ("Quit", "quit", "Exit pyldraw3-tui")
 

@@ -1,0 +1,52 @@
+0 FILE main.ldr
+0 Instruction semantics fixture
+0 Name: main.ldr
+0 Author: fixture
+0 !LPUB ASSEM CAMERA_ANGLES 30 45
+0 !PYLDRAW NOTE "Start here"
+1 4 0 0 0 1 0 0 0 1 0 0 0 1 3001.dat
+0 STEP
+0 ROTSTEP 0 45 0 REL
+0 !LPUB MULTI_STEP BEGIN
+0 !LPUB PLI BEGIN IGN
+0 !PYLDRAW HIGHLIGHT NEXT
+1 15 0 -24 0 1 0 0 0 1 0 0 0 1 3022.dat
+0 !LPUB PLI END
+0 !PYLDRAW ARROW 0 0 0 20 0 0 LABEL "Attach"
+0 LPUB BOM BEGIN IGN
+1 14 40 0 0 1 0 0 0 1 0 0 0 1 6157.dat
+0 LPUB BOM END
+0 !LPUB PART BEGIN IGN
+1 47 80 0 0 1 0 0 0 1 0 0 0 1 3901.dat
+0 !LPUB PART END
+0 !LPUB INSERT PAGE
+0 !LPUB NOSTEP
+0 !LPUB SOMETHING KEEP RAW
+1 16 60 0 0 1 0 0 0 1 0 0 0 1 sub.ldr
+0 STEP
+0 !LPUB MULTI_STEP END
+0 !LPUB CALLOUT BEGIN ROTATED
+1 16 -60 0 0 1 0 0 0 1 0 0 0 1 sub.ldr
+0 !LPUB CALLOUT END
+1 16 0 0 40 1 0 0 0 1 0 0 0 1 embedded.dat
+0 ROTSTEP END
+0 NOFILE
+0 FILE sub.ldr
+0 Instruction submodel
+0 Name: sub.ldr
+1 4 0 0 0 1 0 0 0 1 0 0 0 1 3001.dat
+0 STEP
+0 ROTSTEP 10 0 0 ADD
+1 15 20 0 0 1 0 0 0 1 0 0 0 1 3022.dat
+0 STEP
+0 NOFILE
+0 FILE embedded.dat
+0 Embedded custom dependency
+0 Name: embedded.dat
+3 16 0 0 0 10 0 0 0 10 0
+0 NOFILE
+0 FILE orphan.ldr
+0 Unreachable instruction section
+0 Name: orphan.ldr
+1 14 0 0 0 1 0 0 0 1 0 0 0 1 6157.dat
+0 NOFILE
