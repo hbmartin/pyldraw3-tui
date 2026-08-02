@@ -193,7 +193,7 @@ class ModelView(Vertical):
     @property
     def bom_rows(self) -> list[BomRow]:
         """The currently displayed bill-of-materials rows."""
-        return self.query_one("#bom-table", BomTable).rows_data
+        return self.query_one("#bom-table", expect_type=BomTable).rows_data
 
     def load_model(self, path: Path | str) -> None:
         """Open a model file and show its root model."""
@@ -214,21 +214,21 @@ class ModelView(Vertical):
         title = Path(path).name
         if (description := model.description) is not None:
             title = f"{title} — {description}"
-        self.query_one("#model-title", Static).update(title)
-        select = self.query_one("#submodel-select", Select)
+        self.query_one("#model-title", expect_type=Static).update(title)
+        select = self.query_one("#submodel-select", expect_type=Select)
         root_label = model.name or Path(path).name
         options = [(f"(root) {root_label}", ROOT_KEY)]
         options += [(name, name) for name in model.submodels]
         with select.prevent(Select.Changed):
             select.set_options(options)
             select.value = ROOT_KEY
-        mode_select = self.query_one("#view-mode-select", Select)
+        mode_select = self.query_one("#view-mode-select", expect_type=Select)
         with mode_select.prevent(Select.Changed):
             mode_select.value = MODEL_MODE
         self._sync_mode_ui()
         self._render_model()
         self._render_issues()
-        self.query_one("#piece-table", PieceTable).focus()
+        self.query_one("#piece-table", expect_type=PieceTable).focus()
 
     @on(Select.Changed, "#view-mode-select")
     def _view_mode_changed(self, event: Select.Changed) -> None:
@@ -268,23 +268,33 @@ class ModelView(Vertical):
         self._selected_instruction_step = 1
         self._step_occurrence_counts = None
         self._step_counts_section = None
-        submodel_select = self.query_one("#submodel-select", Select)
+        submodel_select = self.query_one("#submodel-select", expect_type=Select)
         with submodel_select.prevent(Select.Changed):
             submodel_select.set_options([])
         self._view_mode = MODEL_MODE
-        mode_select = self.query_one("#view-mode-select", Select)
+        mode_select = self.query_one("#view-mode-select", expect_type=Select)
         with mode_select.prevent(Select.Changed):
             mode_select.value = MODEL_MODE
         self._sync_mode_ui()
         self.add_class("errored")
-        self.query_one("#model-error", Static).update(f"[bold red]Error:[/] {message}")
-        self.query_one("#model-title", Static).update("No model open")
-        self.query_one("#piece-table", PieceTable).set_occurrences([], self._parts)
-        self.query_one("#stats-panel", StatsPanel).update("Model has no pieces.")
-        self.query_one("#instruction-details", InstructionDetails).update("")
-        self.query_one("#pli-table", BomTable).set_rows([], self._parts)
-        self.query_one("#bom-table", BomTable).set_rows([], self._parts)
-        self.query_one("#directives-table", DirectivesTable).set_directives([])
+        self.query_one("#model-error", expect_type=Static).update(
+            f"[bold red]Error:[/] {message}"
+        )
+        self.query_one("#model-title", expect_type=Static).update("No model open")
+        self.query_one("#piece-table", expect_type=PieceTable).set_occurrences(
+            [], self._parts
+        )
+        self.query_one("#stats-panel", expect_type=StatsPanel).update(
+            "Model has no pieces."
+        )
+        self.query_one("#instruction-details", expect_type=InstructionDetails).update(
+            ""
+        )
+        self.query_one("#pli-table", expect_type=BomTable).set_rows([], self._parts)
+        self.query_one("#bom-table", expect_type=BomTable).set_rows([], self._parts)
+        self.query_one("#directives-table", expect_type=DirectivesTable).set_directives(
+            []
+        )
         self._clear_instruction_selectors()
 
     def _selected_model(self) -> Model | None:
@@ -296,7 +306,7 @@ class ModelView(Vertical):
             return self._model.submodel_view(self._selected_key)
         except UnknownSubmodelError:
             self._selected_key = ROOT_KEY
-            select = self.query_one("#submodel-select", Select)
+            select = self.query_one("#submodel-select", expect_type=Select)
             with select.prevent(Select.Changed):
                 select.value = ROOT_KEY
             return self._model
@@ -315,16 +325,16 @@ class ModelView(Vertical):
         occurrences = list(
             model.iter_occurrences(include_steps=len(steps) > 1),
         )
-        self.query_one("#piece-table", PieceTable).set_occurrences(
+        self.query_one("#piece-table", expect_type=PieceTable).set_occurrences(
             occurrences,
             self._parts,
         )
-        self.query_one("#stats-panel", StatsPanel).show_occurrences(
+        self.query_one("#stats-panel", expect_type=StatsPanel).show_occurrences(
             occurrences,
             self._parts,
             steps=len(steps),
         )
-        self.query_one("#bom-table", BomTable).set_rows(
+        self.query_one("#bom-table", expect_type=BomTable).set_rows(
             bill_of_materials(model, parts=self._parts),
             self._parts,
         )
@@ -347,25 +357,28 @@ class ModelView(Vertical):
         )
         # pyldraw3 guarantees the cumulative expansion is the ordered
         # concatenation of each step's added occurrences; if that ever
-        # drifts, blank step labels beat crashing the render.
+        # drifts, falling back to each occurrence's own step number
+        # beats crashing the render.
         step_numbers = labels if len(labels) == len(occurrences) else None
-        self.query_one("#piece-table", PieceTable).set_occurrences(
+        self.query_one("#piece-table", expect_type=PieceTable).set_occurrences(
             occurrences,
             self._parts,
             step_numbers=step_numbers,
         )
-        self.query_one("#stats-panel", StatsPanel).show_occurrences(
+        self.query_one("#stats-panel", expect_type=StatsPanel).show_occurrences(
             occurrences,
             self._parts,
             steps=len(section.steps),
         )
-        self.query_one("#instruction-details", InstructionDetails).show_step(
+        self.query_one(
+            "#instruction-details", expect_type=InstructionDetails
+        ).show_step(
             step,
             total_steps=len(section.steps),
             added_count=counts[step.number - 1],
             cumulative_count=len(occurrences),
         )
-        self.query_one("#pli-table", BomTable).set_rows(
+        self.query_one("#pli-table", expect_type=BomTable).set_rows(
             step.added_bill_of_materials(
                 parts=self._parts,
                 expand_submodels=True,
@@ -374,7 +387,7 @@ class ModelView(Vertical):
             self._parts,
             title="Parts list",
         )
-        self.query_one("#bom-table", BomTable).set_rows(
+        self.query_one("#bom-table", expect_type=BomTable).set_rows(
             step.cumulative_bill_of_materials(
                 parts=self._parts,
                 expand_submodels=True,
@@ -382,7 +395,7 @@ class ModelView(Vertical):
             ),
             self._parts,
         )
-        self.query_one("#directives-table", DirectivesTable).set_directives(
+        self.query_one("#directives-table", expect_type=DirectivesTable).set_directives(
             step.directives,
         )
 
@@ -414,7 +427,9 @@ class ModelView(Vertical):
         if reset or self._selected_instruction_section not in section_names:
             self._selected_instruction_section = document.root.name
             self._selected_instruction_step = 1
-        section_select = self.query_one("#instruction-section-select", Select)
+        section_select = self.query_one(
+            "#instruction-section-select", expect_type=Select
+        )
         options = [
             (
                 f"(root) {section.name}" if section.is_root else section.name,
@@ -435,7 +450,7 @@ class ModelView(Vertical):
         numbers = {step.number for step in section.steps}
         if reset or self._selected_instruction_step not in numbers:
             self._selected_instruction_step = section.steps[0].number
-        step_select = self.query_one("#instruction-step-select", Select)
+        step_select = self.query_one("#instruction-step-select", expect_type=Select)
         with step_select.prevent(Select.Changed):
             step_select.set_options(
                 [(f"Step {step.number}", step.number) for step in section.steps],
@@ -465,20 +480,22 @@ class ModelView(Vertical):
         return section, fallback
 
     def _clear_instruction_selectors(self) -> None:
-        section_select = self.query_one("#instruction-section-select", Select)
+        section_select = self.query_one(
+            "#instruction-section-select", expect_type=Select
+        )
         with section_select.prevent(Select.Changed):
             section_select.set_options([])
         self._clear_step_selector()
 
     def _clear_step_selector(self) -> None:
-        step_select = self.query_one("#instruction-step-select", Select)
+        step_select = self.query_one("#instruction-step-select", expect_type=Select)
         with step_select.prevent(Select.Changed):
             step_select.set_options([])
 
     def _sync_mode_ui(self) -> None:
         instructions = self._view_mode == INSTRUCTIONS_MODE
         self.set_class(instructions, "instructions")
-        tabs = self.query_one("#model-tabs", TabbedContent)
+        tabs = self.query_one("#model-tabs", expect_type=TabbedContent)
         if not instructions and tabs.active in _INSTRUCTION_ONLY_TABS:
             tabs.active = "tab-pieces"
         for pane_id in _INSTRUCTION_ONLY_TABS:
@@ -489,7 +506,7 @@ class ModelView(Vertical):
         next_mode = (
             MODEL_MODE if self._view_mode == INSTRUCTIONS_MODE else INSTRUCTIONS_MODE
         )
-        self.query_one("#view-mode-select", Select).value = next_mode
+        self.query_one("#view-mode-select", expect_type=Select).value = next_mode
 
     def action_previous_instruction_step(self) -> None:
         """Select the preceding step in the current instruction section."""
@@ -509,7 +526,7 @@ class ModelView(Vertical):
             max(self._selected_instruction_step + offset, section.steps[0].number),
             section.steps[-1].number,
         )
-        self.query_one("#instruction-step-select", Select).value = target
+        self.query_one("#instruction-step-select", expect_type=Select).value = target
 
     def _render_issues(self) -> None:
         """Validate the open file and show the issues, whole file at once.
@@ -535,6 +552,8 @@ class ModelView(Vertical):
             else []
         )
         combined_issues = [*issues, *instruction_issues]
-        self.query_one("#issues-table", IssuesTable).set_issues(combined_issues)
-        tabs = self.query_one("#model-tabs", TabbedContent)
+        self.query_one("#issues-table", expect_type=IssuesTable).set_issues(
+            combined_issues
+        )
+        tabs = self.query_one("#model-tabs", expect_type=TabbedContent)
         tabs.get_tab("tab-issues").label = f"Issues ({len(combined_issues)})"

@@ -86,9 +86,9 @@ async def test_catalog_loads_and_selects_first_part(make_app):
     app = make_app()
     async with app.run_test(size=(120, 40)) as pilot:
         await wait_for_catalog(app, pilot)
-        parts_list = app.query_one("#parts-list", PartsList)
+        parts_list = app.query_one("#parts-list", expect_type=PartsList)
         assert parts_list.row_count == 5
-        view = app.query_one("#catalog-view", CatalogView)
+        view = app.query_one("#catalog-view", expect_type=CatalogView)
         assert view.selected_entry is not None
         assert view.selected_entry.code == "3001"
 
@@ -104,7 +104,7 @@ async def test_catalog_load_failure_clears_loading(fixture_config):
     app = app_module.PyldrawTuiApp(source=FailingSource(config=fixture_config))
     async with app.run_test(size=(120, 40)) as pilot:
         await wait_for_catalog(app, pilot)
-        view = app.query_one("#catalog-view", CatalogView)
+        view = app.query_one("#catalog-view", expect_type=CatalogView)
         assert not view.loading
 
 
@@ -220,7 +220,7 @@ async def test_palette_marks_solid_colours(make_app):
     app = make_app()
     async with app.run_test(size=(120, 40)) as pilot:
         await wait_for_catalog(app, pilot)
-        swatches = app.query_one("#palette-swatches", ColourSwatches)
+        swatches = app.query_one("#palette-swatches", expect_type=ColourSwatches)
         lines = str(swatches.render()).splitlines()
         solid = [line for line in lines if "[solid]" in line]
         assert len(solid) == 5
@@ -245,9 +245,9 @@ async def test_filter_narrows_list(make_app):
         assert isinstance(app.focused, FilterBox)
         await pilot.press(*"plate")
         await pilot.pause(0.3)
-        parts_list = app.query_one("#parts-list", PartsList)
+        parts_list = app.query_one("#parts-list", expect_type=PartsList)
         assert parts_list.row_count == 2
-        view = app.query_one("#catalog-view", CatalogView)
+        view = app.query_one("#catalog-view", expect_type=CatalogView)
         assert view.selected_entry is not None
         assert view.selected_entry.code == "3022"
 
@@ -259,7 +259,7 @@ async def test_filter_matches_keywords(make_app):
         await pilot.press("slash")
         await pilot.press(*"axle")
         await pilot.pause(0.3)
-        view = app.query_one("#catalog-view", CatalogView)
+        view = app.query_one("#catalog-view", expect_type=CatalogView)
         assert view.selected_entry is not None
         assert view.selected_entry.code == "6157"
 
@@ -273,9 +273,9 @@ async def test_category_selection_scopes_list(make_app):
         # Root is "All parts"; first child is Brick (1).
         await pilot.press("j", "enter")
         await pilot.pause()
-        parts_list = app.query_one("#parts-list", PartsList)
+        parts_list = app.query_one("#parts-list", expect_type=PartsList)
         assert parts_list.row_count == 1
-        view = app.query_one("#catalog-view", CatalogView)
+        view = app.query_one("#catalog-view", expect_type=CatalogView)
         assert view.selected_entry is not None
         assert view.selected_entry.code == "3001"
 
@@ -286,7 +286,7 @@ async def test_row_selection_updates_detail(make_app):
         await wait_for_catalog(app, pilot)
         await pilot.press("j")  # move from 3001 to 3022
         await pilot.pause()
-        subparts = app.query_one("#subpart-tree", SubPartTree)
+        subparts = app.query_one("#subpart-tree", expect_type=SubPartTree)
         assert str(subparts.root.label).startswith("3022")
         labels = [str(child.label) for child in subparts.root.children]
         assert any("stud" in label for label in labels)
@@ -299,7 +299,7 @@ async def test_subpart_tree_drills_into_parts(make_app):
         await wait_for_catalog(app, pilot)
         app.focus_part_in_catalog("6157")
         await pilot.pause()
-        subparts = app.query_one("#subpart-tree", SubPartTree)
+        subparts = app.query_one("#subpart-tree", expect_type=SubPartTree)
         child_3022 = next(
             child
             for child in subparts.root.children
@@ -320,7 +320,7 @@ async def test_sorting_toggles_direction(make_app):
     app = make_app()
     async with app.run_test(size=(120, 40)) as pilot:
         await wait_for_catalog(app, pilot)
-        parts_list = app.query_one("#parts-list", PartsList)
+        parts_list = app.query_one("#parts-list", expect_type=PartsList)
         parts_list.sort_by(0)
         await pilot.pause()
         first = parts_list.get_row_at(0)
@@ -337,12 +337,12 @@ async def test_sorting_preserves_highlighted_part(make_app):
         await wait_for_catalog(app, pilot)
         app.focus_part_in_catalog("3022")
         await pilot.pause()
-        parts_list = app.query_one("#parts-list", PartsList)
+        parts_list = app.query_one("#parts-list", expect_type=PartsList)
         parts_list.sort_by(0)
         await pilot.pause()
         parts_list.sort_by(0)
         await pilot.pause()
-        view = app.query_one("#catalog-view", CatalogView)
+        view = app.query_one("#catalog-view", expect_type=CatalogView)
         assert parts_list.highlighted_entry is not None
         assert parts_list.highlighted_entry.code == "3022"
         assert view.selected_entry is not None
@@ -355,7 +355,7 @@ async def test_sorting_restores_highlight_with_single_message(make_app, monkeypa
         await wait_for_catalog(app, pilot)
         app.focus_part_in_catalog("3022")
         await pilot.pause()
-        parts_list = app.query_one("#parts-list", PartsList)
+        parts_list = app.query_one("#parts-list", expect_type=PartsList)
         parts_list.sort_by(0)
         await pilot.pause()
 
@@ -443,7 +443,7 @@ async def test_focus_part_in_catalog_jumps_to_code(make_app):
         await wait_for_catalog(app, pilot)
         app.focus_part_in_catalog("973")
         await pilot.pause()
-        view = app.query_one("#catalog-view", CatalogView)
+        view = app.query_one("#catalog-view", expect_type=CatalogView)
         assert view.selected_entry is not None
         assert view.selected_entry.code == "973"
         assert view.selected_entry.minifig_section is not None

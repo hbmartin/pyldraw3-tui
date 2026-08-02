@@ -13,7 +13,7 @@ from pyldraw3_tui.widgets.colour_swatches import colour_chip
 if TYPE_CHECKING:
     from collections.abc import Callable, Sequence
 
-    from ldraw.model import Model, ModelOccurrence
+    from ldraw.model import ModelOccurrence
     from ldraw.part_geometry_types import BoundingBox
     from ldraw.parts import Parts
     from ldraw.pieces import Vector
@@ -46,19 +46,6 @@ class StatsPanel(Static):
     Bounds come from ``ModelSummary``; when no piece geometry resolves, the
     panel falls back to the min/max of piece origins.
     """
-
-    def show_model(
-        self,
-        model: Model,
-        parts: Parts | None,
-        steps: int | None = None,
-    ) -> None:
-        """Render the stats for a model's leaf pieces."""
-        self.show_occurrences(
-            tuple(model.iter_occurrences()),
-            parts,
-            steps=steps,
-        )
 
     def show_occurrences(
         self,

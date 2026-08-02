@@ -84,7 +84,7 @@ class SetupScreen(Screen[None]):
         self._download_and_generate()
 
     def _status(self, message: str) -> None:
-        self.query_one("#setup-status", Static).update(message)
+        self.query_one("#setup-status", expect_type=Static).update(message)
 
     @work(thread=True, exclusive=True, group="setup")
     def _download_and_generate(self) -> None:
@@ -110,7 +110,7 @@ class SetupScreen(Screen[None]):
 
     def _failed(self, reason: str) -> None:
         self.remove_class("working")
-        self.query_one("#setup-download", Button).disabled = False
+        self.query_one("#setup-download", expect_type=Button).disabled = False
         self._status(f"[red]Setup failed:[/] {reason}")
 
     def _succeeded(self) -> None:

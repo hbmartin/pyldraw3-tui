@@ -107,19 +107,19 @@ class PartDetail(Vertical):
         """Provide the catalog: fills the palette and enables drill-down."""
         self._parts = parts
         self._library_root = _library_root(parts)
-        self.query_one("#palette-swatches", ColourSwatches).set_palette(
+        self.query_one("#palette-swatches", expect_type=ColourSwatches).set_palette(
             parts.colours_by_code.values(),
         )
-        self.query_one("#subpart-tree", SubPartTree).set_parts(parts)
+        self.query_one("#subpart-tree", expect_type=SubPartTree).set_parts(parts)
         if self._entry is not None:
             self.show_entry(self._entry)
 
     def show_entry(self, entry: CatalogEntry | None) -> None:
         """Display metadata and the sub-part tree for an entry."""
         self._entry = entry
-        metadata = self.query_one("#part-metadata", Static)
+        metadata = self.query_one("#part-metadata", expect_type=Static)
         if entry is None:
             metadata.update("No part selected")
         else:
             metadata.update(_metadata_text(entry, self._library_root, self._parts))
-        self.query_one("#subpart-tree", SubPartTree).set_root_entry(entry)
+        self.query_one("#subpart-tree", expect_type=SubPartTree).set_root_entry(entry)

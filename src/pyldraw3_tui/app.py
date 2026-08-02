@@ -87,7 +87,7 @@ class PyldrawTuiApp(App[None]):
     def on_mount(self) -> None:
         """Classify the data source and start loading the catalog."""
         self.theme = DARK_THEME
-        model_view = self.query_one("#model-view", ModelView)
+        model_view = self.query_one("#model-view", expect_type=ModelView)
         model_view.set_source(self.source)
         if self._model_path is not None:
             model_view.load_model(self._model_path)
@@ -112,7 +112,7 @@ class PyldrawTuiApp(App[None]):
                 "Building the parts index — the first load can take a while…",
                 timeout=10,
             )
-        self.query_one("#catalog-view", CatalogView).loading = True
+        self.query_one("#catalog-view", expect_type=CatalogView).loading = True
         self._catalog_worker = self._load_catalog()
 
     @property
@@ -147,24 +147,24 @@ class PyldrawTuiApp(App[None]):
         self.call_from_thread(self._catalog_ready, parts)
 
     def _catalog_failed(self, reason: str) -> None:
-        self.query_one("#catalog-view", CatalogView).loading = False
+        self.query_one("#catalog-view", expect_type=CatalogView).loading = False
         self.notify(f"Could not load the catalog: {reason}", severity="error")
 
     def _catalog_ready(self, parts: Parts) -> None:
         self.parts = parts
         self.search_index = SearchIndex.from_catalog(parts.catalog)
-        catalog_view = self.query_one("#catalog-view", CatalogView)
+        catalog_view = self.query_one("#catalog-view", expect_type=CatalogView)
         catalog_view.set_parts(parts, self.search_index)
         catalog_view.loading = False
-        self.query_one("#model-view", ModelView).set_parts(parts)
-        if self.query_one("#main-tabs", TabbedContent).active == "catalog":
-            self.query_one("#parts-list", PartsList).focus()
+        self.query_one("#model-view", expect_type=ModelView).set_parts(parts)
+        if self.query_one("#main-tabs", expect_type=TabbedContent).active == "catalog":
+            self.query_one("#parts-list", expect_type=PartsList).focus()
         self.notify(f"Catalog loaded: {len(parts.catalog.by_code)} parts")
 
     # ------------------------------------------------------------- helpers
 
     def _selected_entry(self) -> CatalogEntry | None:
-        entry = self.query_one("#catalog-view", CatalogView).selected_entry
+        entry = self.query_one("#catalog-view", expect_type=CatalogView).selected_entry
         if entry is None:
             self.notify("No part selected.", severity="warning")
         return entry
@@ -181,8 +181,8 @@ class PyldrawTuiApp(App[None]):
 
     def focus_part_in_catalog(self, code: str) -> None:
         """Switch to the catalog tab and select a part by code."""
-        self.query_one("#main-tabs", TabbedContent).active = "catalog"
-        self.query_one("#catalog-view", CatalogView).focus_part(code)
+        self.query_one("#main-tabs", expect_type=TabbedContent).active = "catalog"
+        self.query_one("#catalog-view", expect_type=CatalogView).focus_part(code)
 
     def help_sections(self) -> BindingSections:
         """Collect binding tables for the help screen, grouped by owner."""
@@ -200,7 +200,7 @@ class PyldrawTuiApp(App[None]):
 
     def action_show_tab(self, tab: str) -> None:
         """Activate the Catalog or Model tab."""
-        self.query_one("#main-tabs", TabbedContent).active = tab
+        self.query_one("#main-tabs", expect_type=TabbedContent).active = tab
         if tab == "model":
             self.query_one("#piece-table", expect_type=PieceTable).focus()
 
@@ -256,8 +256,8 @@ class PyldrawTuiApp(App[None]):
     def _open_model(self, path: str | None) -> None:
         if not path:
             return
-        self.query_one("#main-tabs", TabbedContent).active = "model"
-        self.query_one("#model-view", ModelView).load_model(path)
+        self.query_one("#main-tabs", expect_type=TabbedContent).active = "model"
+        self.query_one("#model-view", expect_type=ModelView).load_model(path)
 
     async def action_regenerate_index(self) -> None:
         """Delete the persistent index and rebuild it from the library."""
@@ -279,7 +279,7 @@ class PyldrawTuiApp(App[None]):
         self._copy_bom(as_json=True)
 
     def _copy_bom(self, *, as_json: bool) -> None:
-        rows = self.query_one("#model-view", ModelView).bom_rows
+        rows = self.query_one("#model-view", expect_type=ModelView).bom_rows
         if not rows:
             self.notify("No BOM to copy — open a model first.", severity="warning")
             return
