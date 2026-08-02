@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from textual.widgets import Input, Select, Static, TabbedContent
+from textual.widgets import Input, OptionList, Select, Static, TabbedContent
 
 import pyldraw3_tui.app as app_module
 from pyldraw3_tui.screens.model import (
@@ -24,8 +24,8 @@ async def test_cli_file_opens_model_tab(make_app, car_ldr):
     app = make_app(model_path=car_ldr)
     async with app.run_test(size=(120, 40)) as pilot:
         await wait_for_catalog(app, pilot)
-        assert app.query_one("#main-tabs", TabbedContent).active == "model"
-        piece_table = app.query_one("#piece-table", PieceTable)
+        assert app.query_one("#main-tabs", expect_type=TabbedContent).active == "model"
+        piece_table = app.query_one("#piece-table", expect_type=PieceTable)
         assert piece_table.row_count == 3
         # Descriptions resolve once the catalog has loaded.
         row = piece_table.get_row_at(0)
@@ -37,7 +37,7 @@ async def test_mpd_pieces_expand_submodels(make_app, spaceship_mpd):
     app = make_app(model_path=spaceship_mpd)
     async with app.run_test(size=(120, 40)) as pilot:
         await wait_for_catalog(app, pilot)
-        piece_table = app.query_one("#piece-table", PieceTable)
+        piece_table = app.query_one("#piece-table", expect_type=PieceTable)
         # 1 brick + 2 wings x 2 plates
         assert piece_table.row_count == 5
         # A single-step model shows no step numbers.
@@ -48,10 +48,10 @@ async def test_building_steps_shown(make_app, car_ldr):
     app = make_app(model_path=car_ldr)
     async with app.run_test(size=(120, 40)) as pilot:
         await wait_for_catalog(app, pilot)
-        piece_table = app.query_one("#piece-table", PieceTable)
+        piece_table = app.query_one("#piece-table", expect_type=PieceTable)
         steps = [piece_table.get_row_at(row)[6] for row in range(3)]
         assert steps == ["1", "2", "3"]
-        stats = app.query_one("#stats-panel", StatsPanel)
+        stats = app.query_one("#stats-panel", expect_type=StatsPanel)
         assert "building steps  3" in str(stats.render())
 
 
@@ -59,12 +59,12 @@ async def test_submodel_selector_switches_model(make_app, spaceship_mpd):
     app = make_app(model_path=spaceship_mpd)
     async with app.run_test(size=(120, 40)) as pilot:
         await wait_for_catalog(app, pilot)
-        select = app.query_one("#submodel-select", Select)
+        select = app.query_one("#submodel-select", expect_type=Select)
         select.value = "wing.ldr"
         await pilot.pause()
-        piece_table = app.query_one("#piece-table", PieceTable)
+        piece_table = app.query_one("#piece-table", expect_type=PieceTable)
         assert piece_table.row_count == 2
-        model_view = app.query_one("#model-view", ModelView)
+        model_view = app.query_one("#model-view", expect_type=ModelView)
         assert len(model_view.bom_rows) == 2
 
 
@@ -72,17 +72,17 @@ async def test_invalid_submodel_selection_resets_to_root(make_app, spaceship_mpd
     app = make_app(model_path=spaceship_mpd)
     async with app.run_test(size=(120, 40)) as pilot:
         await wait_for_catalog(app, pilot)
-        select = app.query_one("#submodel-select", Select)
+        select = app.query_one("#submodel-select", expect_type=Select)
         select.value = "wing.ldr"
         await pilot.pause()
         assert select.value == "wing.ldr"
 
-        model_view = app.query_one("#model-view", ModelView)
+        model_view = app.query_one("#model-view", expect_type=ModelView)
         model_view._selected_key = "missing.ldr"  # noqa: SLF001
         model_view._render_model()  # noqa: SLF001
         await pilot.pause()
 
-        piece_table = app.query_one("#piece-table", PieceTable)
+        piece_table = app.query_one("#piece-table", expect_type=PieceTable)
         assert model_view._selected_key == ROOT_KEY  # noqa: SLF001
         assert select.value == ROOT_KEY
         assert piece_table.row_count == 5
@@ -99,7 +99,7 @@ async def test_bom_rows_and_csv_copy(make_app, spaceship_mpd, monkeypatch):
     app = make_app(model_path=spaceship_mpd)
     async with app.run_test(size=(120, 40)) as pilot:
         await wait_for_catalog(app, pilot)
-        bom_table = app.query_one("#bom-table", BomTable)
+        bom_table = app.query_one("#bom-table", expect_type=BomTable)
         assert bom_table.row_count == 3
         app.action_copy_bom_csv()
         await pilot.pause()
@@ -112,7 +112,7 @@ async def test_summary_stats(make_app, spaceship_mpd):
     app = make_app(model_path=spaceship_mpd)
     async with app.run_test(size=(120, 40)) as pilot:
         await wait_for_catalog(app, pilot)
-        stats = app.query_one("#stats-panel", StatsPanel)
+        stats = app.query_one("#stats-panel", expect_type=StatsPanel)
         rendered = str(stats.render())
         assert "pieces  5" in rendered
         assert "distinct parts  2" in rendered
@@ -125,9 +125,9 @@ async def test_broken_model_shows_error_card(make_app, broken_ldr):
     app = make_app(model_path=broken_ldr)
     async with app.run_test(size=(120, 40)) as pilot:
         await wait_for_catalog(app, pilot)
-        model_view = app.query_one("#model-view", ModelView)
+        model_view = app.query_one("#model-view", expect_type=ModelView)
         assert model_view.has_class("errored")
-        error = app.query_one("#model-error", Static)
+        error = app.query_one("#model-error", expect_type=Static)
         assert "broken.ldr:2" in str(error.render())
 
 
@@ -135,8 +135,8 @@ async def test_clean_model_shows_zero_issues(make_app, car_ldr):
     app = make_app(model_path=car_ldr)
     async with app.run_test(size=(120, 40)) as pilot:
         await wait_for_catalog(app, pilot)
-        assert app.query_one("#issues-table", IssuesTable).row_count == 0
-        tabs = app.query_one("#model-tabs", TabbedContent)
+        assert app.query_one("#issues-table", expect_type=IssuesTable).row_count == 0
+        tabs = app.query_one("#model-tabs", expect_type=TabbedContent)
         assert str(tabs.get_tab("tab-issues").label) == "Issues (0)"
 
 
@@ -144,7 +144,7 @@ async def test_issues_tab_lists_validation_problems(make_app, warnings_ldr):
     app = make_app(model_path=warnings_ldr)
     async with app.run_test(size=(120, 40)) as pilot:
         await wait_for_catalog(app, pilot)
-        issues_table = app.query_one("#issues-table", IssuesTable)
+        issues_table = app.query_one("#issues-table", expect_type=IssuesTable)
         assert issues_table.row_count == 5
         rows = [issues_table.get_row_at(row) for row in range(5)]
         assert [row[0] for row in rows] == ["warnings.ldr"] * 5
@@ -162,7 +162,7 @@ async def test_issues_tab_lists_validation_problems(make_app, warnings_ldr):
         assert "unknown colour code 99" in messages[2]
         assert "unknown part 9999.dat" in messages[3]
         assert "no explicit STEP or ROTSTEP" in messages[4]
-        tabs = app.query_one("#model-tabs", TabbedContent)
+        tabs = app.query_one("#model-tabs", expect_type=TabbedContent)
         assert str(tabs.get_tab("tab-issues").label) == "Issues (5)"
 
 
@@ -170,7 +170,7 @@ async def test_unparseable_model_still_lists_issues(make_app, broken_ldr):
     app = make_app(model_path=broken_ldr)
     async with app.run_test(size=(120, 40)) as pilot:
         await wait_for_catalog(app, pilot)
-        issues_table = app.query_one("#issues-table", IssuesTable)
+        issues_table = app.query_one("#issues-table", expect_type=IssuesTable)
         assert issues_table.row_count == 1
         row = issues_table.get_row_at(0)
         assert row[0] == "broken.ldr"
@@ -186,11 +186,13 @@ async def test_instruction_mode_navigation_is_section_local(
     app = make_app(model_path=instructions_mpd)
     async with app.run_test(size=(120, 40)) as pilot:
         await wait_for_catalog(app, pilot)
-        model_view = app.query_one("#model-view", ModelView)
-        mode_select = app.query_one("#view-mode-select", Select)
-        section_select = app.query_one("#instruction-section-select", Select)
-        step_select = app.query_one("#instruction-step-select", Select)
-        tabs = app.query_one("#model-tabs", TabbedContent)
+        model_view = app.query_one("#model-view", expect_type=ModelView)
+        mode_select = app.query_one("#view-mode-select", expect_type=Select)
+        section_select = app.query_one(
+            "#instruction-section-select", expect_type=Select
+        )
+        step_select = app.query_one("#instruction-step-select", expect_type=Select)
+        tabs = app.query_one("#model-tabs", expect_type=TabbedContent)
         assert mode_select.value == MODEL_MODE
         assert not tabs.get_tab("tab-pli").display
         assert not tabs.get_tab("tab-directives").display
@@ -237,11 +239,11 @@ async def test_instruction_step_renders_cumulative_geometry_and_inventories(
     async with app.run_test(size=(120, 40)) as pilot:
         await wait_for_catalog(app, pilot)
         await pilot.press("i")
-        step_select = app.query_one("#instruction-step-select", Select)
+        step_select = app.query_one("#instruction-step-select", expect_type=Select)
         step_select.value = 3
         await pilot.pause()
 
-        piece_table = app.query_one("#piece-table", PieceTable)
+        piece_table = app.query_one("#piece-table", expect_type=PieceTable)
         assert piece_table.row_count == 6
         assert [piece_table.get_row_at(row)[6] for row in range(6)] == [
             "1",
@@ -252,13 +254,13 @@ async def test_instruction_step_renders_cumulative_geometry_and_inventories(
             "3",
         ]
         assert "3901" in [piece_table.get_row_at(row)[1] for row in range(6)]
-        pli_table = app.query_one("#pli-table", BomTable)
+        pli_table = app.query_one("#pli-table", expect_type=BomTable)
         assert [pli_table.get_row_at(row)[0] for row in range(3)] == [
             "3001",
             "3022",
             "6157",
         ]
-        bom_table = app.query_one("#bom-table", BomTable)
+        bom_table = app.query_one("#bom-table", expect_type=BomTable)
         bom_rows = [
             (bom_table.get_row_at(row)[0], bom_table.get_row_at(row)[3])
             for row in range(2)
@@ -269,7 +271,9 @@ async def test_instruction_step_renders_cumulative_geometry_and_inventories(
         ]
 
         details = str(
-            app.query_one("#instruction-details", InstructionDetails).render(),
+            app.query_one(
+                "#instruction-details", expect_type=InstructionDetails
+            ).render(),
         )
         assert "instruction step  3 of 4" in details
         assert "added occurrences  5" in details
@@ -279,7 +283,7 @@ async def test_instruction_step_renders_cumulative_geometry_and_inventories(
         assert "page break before  yes" in details
         assert "suppressed  yes" in details
 
-        directives = app.query_one("#directives-table", DirectivesTable)
+        directives = app.query_one("#directives-table", expect_type=DirectivesTable)
         assert directives.row_count == 13
         rows = [directives.get_row_at(row) for row in range(13)]
         assert {row[1] for row in rows} >= {"highlight", "arrow"}
@@ -297,20 +301,24 @@ async def test_instruction_step_renders_cumulative_geometry_and_inventories(
         step_select.value = 2
         await pilot.pause()
         details = str(
-            app.query_one("#instruction-details", InstructionDetails).render(),
+            app.query_one(
+                "#instruction-details", expect_type=InstructionDetails
+            ).render(),
         )
         assert "rotation  REL (0, 45, 0)" in details
-        assert app.query_one("#piece-table", PieceTable).row_count == 1
+        assert app.query_one("#piece-table", expect_type=PieceTable).row_count == 1
 
         step_select.value = 4
         await pilot.pause()
         details = str(
-            app.query_one("#instruction-details", InstructionDetails).render(),
+            app.query_one(
+                "#instruction-details", expect_type=InstructionDetails
+            ).render(),
         )
         assert "rotation  END" in details
         assert "callouts  ROTATED: sub.ldr" in details
-        assert app.query_one("#piece-table", PieceTable).row_count == 9
-        pli_table = app.query_one("#pli-table", BomTable)
+        assert app.query_one("#piece-table", expect_type=PieceTable).row_count == 9
+        pli_table = app.query_one("#pli-table", expect_type=BomTable)
         assert [pli_table.get_row_at(row)[0] for row in range(3)] == [
             "3001",
             "3022",
@@ -333,7 +341,7 @@ async def test_instruction_bom_copy_uses_selected_step(
     async with app.run_test(size=(120, 40)) as pilot:
         await wait_for_catalog(app, pilot)
         await pilot.press("i")
-        app.query_one("#instruction-step-select", Select).value = 3
+        app.query_one("#instruction-step-select", expect_type=Select).value = 3
         await pilot.pause()
         app.action_copy_bom_csv()
         await pilot.pause()
@@ -353,7 +361,7 @@ async def test_instruction_issues_include_orphan_section(
     app = make_app(model_path=instructions_mpd)
     async with app.run_test(size=(120, 40)) as pilot:
         await wait_for_catalog(app, pilot)
-        issues_table = app.query_one("#issues-table", IssuesTable)
+        issues_table = app.query_one("#issues-table", expect_type=IssuesTable)
         assert issues_table.row_count == 1
         row = issues_table.get_row_at(0)
         assert row[0] == "orphan.ldr"
@@ -370,7 +378,7 @@ async def test_instruction_step_keys_clamp_at_section_bounds(
     async with app.run_test(size=(120, 40)) as pilot:
         await wait_for_catalog(app, pilot)
         await pilot.press("i")
-        step_select = app.query_one("#instruction-step-select", Select)
+        step_select = app.query_one("#instruction-step-select", expect_type=Select)
         assert step_select.value == 1
         await pilot.press("[")
         assert step_select.value == 1
@@ -388,7 +396,7 @@ async def test_instruction_selection_fallback_synchronizes_step(
     app = make_app(model_path=instructions_mpd)
     async with app.run_test(size=(120, 40)) as pilot:
         await wait_for_catalog(app, pilot)
-        model_view = app.query_one("#model-view", ModelView)
+        model_view = app.query_one("#model-view", expect_type=ModelView)
         model_view._selected_instruction_step = 999  # noqa: SLF001
 
         selection = model_view._instruction_selection()  # noqa: SLF001
@@ -408,18 +416,20 @@ async def test_error_load_exits_instructions_mode(
     async with app.run_test(size=(120, 40)) as pilot:
         await wait_for_catalog(app, pilot)
         await pilot.press("i")
-        model_view = app.query_one("#model-view", ModelView)
+        model_view = app.query_one("#model-view", expect_type=ModelView)
         assert model_view.has_class("instructions")
 
         model_view.load_model(broken_ldr)
         await pilot.pause()
         assert model_view.has_class("errored")
         assert not model_view.has_class("instructions")
-        assert app.query_one("#view-mode-select", Select).value == MODEL_MODE
-        submodel_select = app.query_one("#submodel-select", Select)
+        assert (
+            app.query_one("#view-mode-select", expect_type=Select).value == MODEL_MODE
+        )
+        submodel_select = app.query_one("#submodel-select", expect_type=Select)
         assert submodel_select.value is Select.NULL
-        assert submodel_select._options == [("", Select.NULL)]  # noqa: SLF001
-        tabs = app.query_one("#model-tabs", TabbedContent)
+        assert submodel_select.query_one(OptionList).option_count == 1
+        tabs = app.query_one("#model-tabs", expect_type=TabbedContent)
         assert not tabs.get_tab("tab-pli").display
         assert not tabs.get_tab("tab-directives").display
 
@@ -434,22 +444,29 @@ async def test_opening_another_file_resets_and_clears_instruction_state(
     async with app.run_test(size=(120, 40)) as pilot:
         await wait_for_catalog(app, pilot)
         await pilot.press("i")
-        app.query_one("#instruction-section-select", Select).value = "sub.ldr"
+        app.query_one(
+            "#instruction-section-select", expect_type=Select
+        ).value = "sub.ldr"
         await pilot.pause()
-        app.query_one("#instruction-step-select", Select).value = 3
+        app.query_one("#instruction-step-select", expect_type=Select).value = 3
         await pilot.pause()
 
-        model_view = app.query_one("#model-view", ModelView)
+        model_view = app.query_one("#model-view", expect_type=ModelView)
         model_view.load_model(car_ldr)
         await pilot.pause()
-        assert app.query_one("#view-mode-select", Select).value == MODEL_MODE
-        assert app.query_one("#instruction-section-select", Select).value == "car.ldr"
-        assert app.query_one("#instruction-step-select", Select).value == 1
+        assert (
+            app.query_one("#view-mode-select", expect_type=Select).value == MODEL_MODE
+        )
+        assert (
+            app.query_one("#instruction-section-select", expect_type=Select).value
+            == "car.ldr"
+        )
+        assert app.query_one("#instruction-step-select", expect_type=Select).value == 1
 
         model_view.load_model(broken_ldr)
         await pilot.pause()
         assert model_view._instruction_document is None  # noqa: SLF001
-        assert app.query_one("#piece-table", PieceTable).row_count == 0
+        assert app.query_one("#piece-table", expect_type=PieceTable).row_count == 0
 
 
 async def test_open_model_prompt_loads_model(make_app, car_ldr):
@@ -459,10 +476,10 @@ async def test_open_model_prompt_loads_model(make_app, car_ldr):
         app.action_open_model_prompt()
         await pilot.pause()
         await pilot.pause()
-        prompt = app.screen.query_one("#model-path-input", Input)
+        prompt = app.screen.query_one("#model-path-input", expect_type=Input)
         prompt.value = str(car_ldr)
         prompt.focus()
         await pilot.press("enter")
         await pilot.pause()
-        assert app.query_one("#main-tabs", TabbedContent).active == "model"
-        assert app.query_one("#piece-table", PieceTable).row_count == 3
+        assert app.query_one("#main-tabs", expect_type=TabbedContent).active == "model"
+        assert app.query_one("#piece-table", expect_type=PieceTable).row_count == 3

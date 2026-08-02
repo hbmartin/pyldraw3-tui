@@ -54,7 +54,7 @@ async def test_snapshot_part_detail_subparts(make_app):
     async with app.run_test(size=SIZE) as pilot:
         await wait_for_catalog(app, pilot)
         app.focus_part_in_catalog("6157")
-        app.query_one("#detail-tabs", TabbedContent).active = "tab-subparts"
+        app.query_one("#detail-tabs", expect_type=TabbedContent).active = "tab-subparts"
         await pilot.pause()
         _check(app, "part_detail_subparts")
 
@@ -70,7 +70,7 @@ async def test_snapshot_model_bom(make_app, spaceship_mpd):
     app = make_app(model_path=spaceship_mpd)
     async with app.run_test(size=SIZE) as pilot:
         await wait_for_catalog(app, pilot)
-        app.query_one("#model-tabs", TabbedContent).active = "tab-bom"
+        app.query_one("#model-tabs", expect_type=TabbedContent).active = "tab-bom"
         await pilot.pause()
         _check(app, "model_bom")
 
@@ -79,7 +79,7 @@ async def test_snapshot_model_issues(make_app, warnings_ldr):
     app = make_app(model_path=warnings_ldr)
     async with app.run_test(size=SIZE) as pilot:
         await wait_for_catalog(app, pilot)
-        app.query_one("#model-tabs", TabbedContent).active = "tab-issues"
+        app.query_one("#model-tabs", expect_type=TabbedContent).active = "tab-issues"
         await pilot.pause()
         await pilot.pause()
         _check(app, "model_issues")

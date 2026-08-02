@@ -70,14 +70,16 @@ class CatalogView(Horizontal):
         """Populate every pane once the catalog is loaded."""
         self._parts = parts
         self._search = search
-        self.query_one("#category-tree", CategoryTree).set_catalog(parts.catalog)
-        self.query_one("#part-detail", PartDetail).set_parts(parts)
+        self.query_one("#category-tree", expect_type=CategoryTree).set_catalog(
+            parts.catalog
+        )
+        self.query_one("#part-detail", expect_type=PartDetail).set_parts(parts)
         self._refresh_list()
 
     @property
     def selected_entry(self) -> CatalogEntry | None:
         """The catalog entry under the parts-list cursor."""
-        return self.query_one("#parts-list", PartsList).highlighted_entry
+        return self.query_one("#parts-list", expect_type=PartsList).highlighted_entry
 
     def focus_part(self, code: str) -> None:
         """Reset scope/filter and move the cursor to a part code."""
@@ -85,17 +87,17 @@ class CatalogView(Horizontal):
             return
         self._scope = CategoryScope()
         self._filter = ""
-        filter_box = self.query_one("#filter-box", FilterBox)
+        filter_box = self.query_one("#filter-box", expect_type=FilterBox)
         with filter_box.prevent(FilterBox.Changed):
             filter_box.value = ""
         self._refresh_list()
-        parts_list = self.query_one("#parts-list", PartsList)
+        parts_list = self.query_one("#parts-list", expect_type=PartsList)
         parts_list.focus_code(code)
         parts_list.focus()
 
     def action_focus_filter(self) -> None:
         """Move focus into the live filter box."""
-        self.query_one("#filter-box", FilterBox).focus()
+        self.query_one("#filter-box", expect_type=FilterBox).focus()
 
     @on(CategorySelected)
     def _category_selected(self, event: CategorySelected) -> None:
@@ -112,7 +114,7 @@ class CatalogView(Horizontal):
     @on(PartHighlighted)
     def _part_highlighted(self, event: PartHighlighted) -> None:
         event.stop()
-        self.query_one("#part-detail", PartDetail).show_entry(event.entry)
+        self.query_one("#part-detail", expect_type=PartDetail).show_entry(event.entry)
 
     def _refresh_list(self) -> None:
         if self._parts is None:
@@ -120,6 +122,6 @@ class CatalogView(Horizontal):
         entries = self._scope.entries(self._parts.catalog)
         if self._filter and self._search is not None:
             entries = tuple(self._search.filter(self._filter, within=entries))
-        parts_list = self.query_one("#parts-list", PartsList)
+        parts_list = self.query_one("#parts-list", expect_type=PartsList)
         parts_list.set_entries(entries)
         parts_list.border_title = f"{self._scope.label} ({len(entries)})"
