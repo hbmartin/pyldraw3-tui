@@ -381,6 +381,24 @@ async def test_instruction_step_keys_clamp_at_section_bounds(
         assert step_select.value == 4
 
 
+async def test_instruction_selection_fallback_synchronizes_step(
+    make_app,
+    instructions_mpd,
+):
+    app = make_app(model_path=instructions_mpd)
+    async with app.run_test(size=(120, 40)) as pilot:
+        await wait_for_catalog(app, pilot)
+        model_view = app.query_one("#model-view", ModelView)
+        model_view._selected_instruction_step = 999  # noqa: SLF001
+
+        selection = model_view._instruction_selection()  # noqa: SLF001
+
+        assert selection is not None
+        section, step = selection
+        assert step is section.steps[0]
+        assert model_view._selected_instruction_step == step.number  # noqa: SLF001
+
+
 async def test_error_load_exits_instructions_mode(
     make_app,
     instructions_mpd,
