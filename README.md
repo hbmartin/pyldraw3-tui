@@ -14,11 +14,20 @@ files** — built on [Textual](https://textual.textualize.io/) and
 creates, edits, or exports model or geometry files — it just lets you explore parts and models
 fast, without leaving your terminal.
 
+> **Companion projects:** [`hbmartin/rebrickable`](https://github.com/hbmartin/rebrickable)
+> provides the typed offline catalog, API v3 client, inventories, and LDraw cross-referencing used
+> here. [`hbmartin/legolization`](https://github.com/hbmartin/legolization/) turns voxel or existing
+> LDraw models into physically checked LEGO models with bills of materials and build instructions.
+
 **What you get:**
 
 - 🔎 Look up a part code or description in seconds — no browser, no 3D viewer.
 - 📖 Read any `.ldr`/`.mpd` model's pieces, bounding box, and bill of materials as plain text.
 - 🧱 Follow section-local building steps, rotations, camera state, LPub inventories, and directives.
+- 🌐 Browse Rebrickable parts, sets, inventories, and read-only collections—offline after one
+  explicit catalog refresh, with live reads only when requested.
+- 🔗 Translate the displayed LDraw BOM into Rebrickable part/color identifiers without hiding
+  ambiguous or unresolved mappings.
 - 🔍 Validate model files — structural diagnostics plus semantic instruction issues.
 - 🎨 Preview the full LDraw colour palette with swatches and finish metadata.
 - 📋 Yank codes or export ready-to-paste Python snippets straight into your scripts.
@@ -106,11 +115,12 @@ pyldraw3-tui [FILE]
 ```
 
 With no argument it opens on the **Catalog**; given a `.ldr`/`.mpd` path it opens on the **Model**
-view for that file. Switch modes in-app via the two top tabs: **Catalog** and **Model**.
+view for that file. Switch modes in-app via the three top tabs: **Catalog**, **Model**, and
+**Rebrickable**.
 
 ## Features
 
-The app is organised around its two top tabs.
+The app is organised around its three top tabs.
 
 **Catalog** — browse and look up parts:
 
@@ -130,6 +140,23 @@ The app is organised around its two top tabs.
 - **Validate the file** — the Issues tab combines malformed lines, unknown parts and colours,
   suspicious transforms, and semantic instruction problems with section, line, severity, and stable
   issue code. Files that fail to parse entirely still get an issue list explaining what is wrong.
+- **Translate the current BOM** — the Rebrickable subtab follows the selected root model, submodel,
+  or cumulative instruction step and reports resolved, ambiguous, and unresolved part/color
+  mappings with candidates and provenance. Full or incomplete-only reports can be copied as
+  deterministic CSV or JSON.
+
+**Rebrickable** — browse the official catalog and optional read-only account data:
+
+- **Browse without an API key** — local part/set search, metadata, newest set inventories, public
+  page links, and LDraw translation use the downloaded snapshot and perform no network I/O.
+- **Refresh explicitly** — the TUI downloads and transactionally promotes all 12 catalog datasets
+  only after you confirm Refresh. A failed or cancelled refresh leaves the prior snapshot active.
+- **Fetch live data deliberately** — a selected part or set can fetch fresh details, and sets can
+  separately fetch their live inventory. These actions use the library's paced API client.
+- **Read collections without editing them** — owned sets, loose parts, part lists, and set lists are
+  available when API and user tokens are supplied. The TUI exposes no collection mutation actions.
+- **No images** — upstream image URLs remain response metadata, but the TUI never downloads,
+  caches, renders, copies, or opens them; `o` opens the entity's Rebrickable page instead.
 
 The instruction browser is renderer-neutral and read-only. It does not generate images, PDF/HTML
 instructions, manifests, or snapshot artifacts, and it does not edit instruction metadata.
@@ -154,6 +181,28 @@ Everything lives under your platform's standard directories (resolved by
 The exact library and index paths are recorded in `config.yml`; the values above are the defaults.
 Windows uses the equivalent `%LOCALAPPDATA%` locations.
 
+### Rebrickable catalog and credentials
+
+Rebrickable data uses the platform-standard `rebrickable` application-data and cache directories,
+separate from the LDraw library above. Open the **Rebrickable** tab and choose **Refresh** once to
+download the 12 public CSV datasets (currently about 18 MB compressed and roughly 275 MB as a local
+SQLite snapshot). This refresh does not require an API key; subsequent browsing, inventories, page
+links, exports, and LDraw translation are offline.
+
+Live public reads are optional. Supply the API key through the environment rather than a command-line
+argument:
+
+```sh
+export REBRICKABLE_API_KEY='…'
+pyldraw3-tui
+```
+
+Read-only personal collection views additionally require a Rebrickable user token. Set
+`REBRICKABLE_USER_TOKEN` or enter an existing token in the masked **Token** prompt; prompted tokens
+remain in memory only for the current run. Neither credential is written by the TUI. Live reads are
+explicit and paced conservatively; after a rate-limit response the client honors the server's retry
+delay and the TUI reports the failure without immediately retrying in a loop.
+
 ## Key bindings
 
 **Navigation**
@@ -171,7 +220,7 @@ Windows uses the equivalent `%LOCALAPPDATA%` locations.
 | Key       | Action                                                    |
 | --------- | -------------------------------------------------------- |
 | `y` / `Y` | Yank code / chooser (description, import path)           |
-| `o`       | Open selected part on ldraw.org                          |
+| `o`       | Open the selected LDraw or Rebrickable entity page        |
 | `e`       | Export Python snippet (import / `Piece(...)` / bare code) |
 
 **Model instructions**
@@ -185,7 +234,7 @@ Windows uses the equivalent `%LOCALAPPDATA%` locations.
 
 | Key            | Action                                                  |
 | -------------- | ------------------------------------------------------ |
-| `1` / `2`      | Switch to Catalog / Model tab                          |
+| `1` / `2` / `3` | Switch to Catalog / Model / Rebrickable tab           |
 | `:`            | Command palette (jump to part, open model, copy BOM, …) |
 | `Ctrl+T`       | Toggle light/dark theme                                |
 | `?`            | Help (full key reference)                              |
@@ -217,6 +266,11 @@ with `pyldraw3`, so any configuration that library already uses is picked up aut
 **Where does it store things / how do I reset?**
 Everything lives under the platform directories listed in [First run](#first-run). Deleting the
 config and `generated/` directories resets the app to a first-run state.
+
+**Why is Rebrickable browsing empty or marked unavailable?**
+Open the Rebrickable tab and run the explicit Refresh once. Local browsing needs a ready snapshot but
+never an API key. Live details require `REBRICKABLE_API_KEY`; collection reads also require a user
+token. Authentication and throttling errors are shown without exposing either credential.
 
 ## pyldraw3-tui vs. pyldraw3
 

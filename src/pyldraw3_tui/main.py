@@ -26,9 +26,9 @@ def build_parser() -> ArgumentParser:
     parser = ArgumentParser(
         prog="pyldraw3-tui",
         description=(
-            "Browse the LDraw parts catalog and inspect LDraw model files. "
-            "With no FILE the app opens on the Catalog tab; with a "
-            ".ldr/.mpd FILE it opens on the Model tab."
+            "Browse the LDraw and Rebrickable catalogs and inspect LDraw "
+            "model files. With no FILE the app opens on the Catalog tab; "
+            "with a .ldr/.mpd FILE it opens on the Model tab."
         ),
     )
     parser.add_argument(

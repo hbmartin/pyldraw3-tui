@@ -20,6 +20,7 @@ from pyldraw3_tui.widgets.directives_table import DirectivesTable
 from pyldraw3_tui.widgets.instruction_details import InstructionDetails
 from pyldraw3_tui.widgets.issues_table import IssuesTable
 from pyldraw3_tui.widgets.piece_table import PieceTable
+from pyldraw3_tui.widgets.rebrickable_translation import RebrickableTranslation
 from pyldraw3_tui.widgets.stats_panel import StatsPanel
 
 if TYPE_CHECKING:
@@ -33,6 +34,7 @@ if TYPE_CHECKING:
     from ldraw.parts import Parts
     from textual.app import ComposeResult
 
+    from pyldraw3_tui.data.rebrickable import RebrickableDataProtocol
     from pyldraw3_tui.data.source import CatalogSource
 
 ROOT_KEY = "__root__"
@@ -118,6 +120,7 @@ class ModelView(Vertical):
     def __init__(self, *, id: str | None = None) -> None:  # noqa: A002 - Textual idiom
         super().__init__(id=id)
         self._source: CatalogSource | None = None
+        self._rebrickable_data: RebrickableDataProtocol | None = None
         self._parts: Parts | None = None
         self._model: Model | None = None
         self._path: Path | None = None
@@ -168,6 +171,8 @@ class ModelView(Vertical):
                 yield BomTable(id="pli-table")
             with TabPane("BOM", id="tab-bom"):
                 yield BomTable(id="bom-table")
+            with TabPane("Rebrickable", id="tab-rebrickable"):
+                yield RebrickableTranslation(id="rebrickable-translation")
             with TabPane("Directives", id="tab-directives"):
                 yield DirectivesTable(id="directives-table")
             with TabPane("Issues", id="tab-issues"):
@@ -180,6 +185,13 @@ class ModelView(Vertical):
     def set_source(self, source: CatalogSource) -> None:
         """Provide the source used to open model files."""
         self._source = source
+
+    def set_rebrickable_data(self, data: RebrickableDataProtocol | None) -> None:
+        """Provide the offline/live Rebrickable integration service."""
+        self._rebrickable_data = data
+        self.query_one(
+            "#rebrickable-translation", expect_type=RebrickableTranslation
+        ).set_data(data)
 
     def set_parts(self, parts: Parts) -> None:
         """Provide the catalog for descriptions and colour names."""
@@ -292,6 +304,9 @@ class ModelView(Vertical):
         )
         self.query_one("#pli-table", expect_type=BomTable).set_rows([], self._parts)
         self.query_one("#bom-table", expect_type=BomTable).set_rows([], self._parts)
+        self.query_one(
+            "#rebrickable-translation", expect_type=RebrickableTranslation
+        ).set_bom([], self._parts)
         self.query_one("#directives-table", expect_type=DirectivesTable).set_directives(
             []
         )
@@ -334,10 +349,11 @@ class ModelView(Vertical):
             self._parts,
             steps=len(steps),
         )
-        self.query_one("#bom-table", expect_type=BomTable).set_rows(
-            bill_of_materials(model, parts=self._parts),
-            self._parts,
-        )
+        rows = bill_of_materials(model, parts=self._parts)
+        self.query_one("#bom-table", expect_type=BomTable).set_rows(rows, self._parts)
+        self.query_one(
+            "#rebrickable-translation", expect_type=RebrickableTranslation
+        ).set_bom(rows, self._parts)
 
     def _render_instruction_step(self) -> None:
         selection = self._instruction_selection()
@@ -387,14 +403,18 @@ class ModelView(Vertical):
             self._parts,
             title="Parts list",
         )
+        bom_rows = step.cumulative_bill_of_materials(
+            parts=self._parts,
+            expand_submodels=True,
+            respect_lpub=True,
+        )
         self.query_one("#bom-table", expect_type=BomTable).set_rows(
-            step.cumulative_bill_of_materials(
-                parts=self._parts,
-                expand_submodels=True,
-                respect_lpub=True,
-            ),
+            bom_rows,
             self._parts,
         )
+        self.query_one(
+            "#rebrickable-translation", expect_type=RebrickableTranslation
+        ).set_bom(bom_rows, self._parts)
         self.query_one("#directives-table", expect_type=DirectivesTable).set_directives(
             step.directives,
         )

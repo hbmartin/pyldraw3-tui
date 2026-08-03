@@ -41,9 +41,9 @@ class PyldrawTuiCommands(Provider):
             "Yank other part fields",
         )
         yield (
-            "Open part on ldraw.org",
+            "Open selected public page",
             "open_web",
-            "Show the selected part in the browser",
+            "Show the selected LDraw or Rebrickable entity in the browser",
         )
         yield (
             "Export Python snippet…",
@@ -52,6 +52,26 @@ class PyldrawTuiCommands(Provider):
         )
         yield ("Copy BOM as CSV", "copy_bom_csv", "Yank the displayed BOM as CSV")
         yield ("Copy BOM as JSON", "copy_bom_json", "Yank the displayed BOM as JSON")
+        yield (
+            "Copy Rebrickable translation as CSV",
+            "copy_translation_csv",
+            "Yank the complete displayed translation",
+        )
+        yield (
+            "Copy Rebrickable translation as JSON",
+            "copy_translation_json",
+            "Yank the complete displayed translation",
+        )
+        yield (
+            "Copy incomplete Rebrickable translation as CSV",
+            "copy_incomplete_translation_csv",
+            "Yank ambiguous and unresolved translation rows",
+        )
+        yield (
+            "Copy incomplete Rebrickable translation as JSON",
+            "copy_incomplete_translation_json",
+            "Yank ambiguous and unresolved translation rows",
+        )
         yield ("Help", "help", "Show the key-binding reference")
         yield ("Quit", "quit", "Exit pyldraw3-tui")
 
