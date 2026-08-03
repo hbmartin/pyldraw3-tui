@@ -10,6 +10,7 @@ from ldraw.config import Config
 
 from pyldraw3_tui.app import PyldrawTuiApp
 from pyldraw3_tui.data.source import CatalogSource
+from tests.fakes import FakeRebrickableData
 
 if TYPE_CHECKING:
     from collections.abc import Callable
@@ -37,17 +38,29 @@ def parts(fixture_config: Config) -> Parts:
 
 
 @pytest.fixture
+def fake_rebrickable() -> FakeRebrickableData:
+    """Return a deterministic, network-free Rebrickable integration."""
+    return FakeRebrickableData()
+
+
+@pytest.fixture
 def make_app(
     fixture_config: Config,
     monkeypatch: pytest.MonkeyPatch,
+    fake_rebrickable: FakeRebrickableData,
 ) -> Callable[..., PyldrawTuiApp]:
     """Return a factory building the app against the fixture library."""
     monkeypatch.delenv("NO_COLOR", raising=False)
 
-    def factory(model_path: Path | None = None) -> PyldrawTuiApp:
+    def factory(
+        model_path: Path | None = None,
+        *,
+        rebrickable_data: FakeRebrickableData | None = fake_rebrickable,
+    ) -> PyldrawTuiApp:
         app = PyldrawTuiApp(
             source=CatalogSource(config=fixture_config),
             model_path=model_path,
+            rebrickable_data=rebrickable_data,
         )
         # Deterministic frames for snapshots (no sliding tab underline).
         app.animation_level = "none"

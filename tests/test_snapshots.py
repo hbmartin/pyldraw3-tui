@@ -97,3 +97,25 @@ async def test_snapshot_model_instructions(
         app.query_one("#model-tabs", expect_type=TabbedContent).active = "tab-summary"
         await pilot.pause()
         _check(app, "model_instructions")
+
+
+async def test_snapshot_rebrickable_catalog(make_app):
+    app = make_app()
+    async with app.run_test(size=SIZE) as pilot:
+        await wait_for_catalog(app, pilot)
+        app.query_one("#main-tabs", expect_type=TabbedContent).active = "rebrickable"
+        await app.workers.wait_for_complete()
+        await pilot.pause()
+        _check(app, "rebrickable_catalog")
+
+
+async def test_snapshot_rebrickable_translation(make_app, spaceship_mpd):
+    app = make_app(model_path=spaceship_mpd)
+    async with app.run_test(size=SIZE) as pilot:
+        await wait_for_catalog(app, pilot)
+        app.query_one(
+            "#model-tabs", expect_type=TabbedContent
+        ).active = "tab-rebrickable"
+        await app.workers.wait_for_complete()
+        await pilot.pause()
+        _check(app, "rebrickable_translation")
