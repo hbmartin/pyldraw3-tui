@@ -11,7 +11,7 @@ from rebrickable.exports import to_json, translation_to_csv
 from textual import work
 from textual.app import App
 from textual.binding import Binding
-from textual.widgets import Footer, Header, TabbedContent, TabPane
+from textual.widgets import DataTable, Footer, Header, TabbedContent, TabPane
 from textual.worker import WorkerCancelled, WorkerFailed
 
 from pyldraw3_tui.clipboard import copy_text
@@ -236,7 +236,7 @@ class PyldrawTuiApp(App[None]):
         if tab == "model":
             self.query_one("#piece-table", expect_type=PieceTable).focus()
         elif tab == "rebrickable":
-            self.query_one("#rb-results").focus()
+            self.query_one("#rb-results", expect_type=DataTable).focus()
 
     def action_toggle_theme(self) -> None:
         """Switch between the dark and light themes."""
@@ -316,45 +316,31 @@ class PyldrawTuiApp(App[None]):
             self.notify(f"Opened {entry.code} on ldraw.org.")
 
     def _selected_rebrickable_url(self) -> str | None:
+        widget = self._active_rebrickable_widget()
+        return widget.selected_page_url if widget is not None else None
+
+    def _active_rebrickable_widget(
+        self,
+    ) -> RebrickableView | RebrickableTranslation | None:
         tabs = self.query_one("#main-tabs", expect_type=TabbedContent)
-        if tabs.active == "rebrickable":
-            return self.query_one(
-                "#rebrickable-view", expect_type=RebrickableView
-            ).selected_page_url
-        if tabs.active == "model":
-            model_tabs = self.query_one("#model-tabs", expect_type=TabbedContent)
-            if model_tabs.active == "tab-rebrickable":
-                return self.query_one(
-                    "#rebrickable-translation",
-                    expect_type=RebrickableTranslation,
-                ).selected_page_url
+        match tabs.active:
+            case "rebrickable":
+                return self.query_one("#rebrickable-view", expect_type=RebrickableView)
+            case "model":
+                model_tabs = self.query_one("#model-tabs", expect_type=TabbedContent)
+                if model_tabs.active == "tab-rebrickable":
+                    return self.query_one(
+                        "#rebrickable-translation",
+                        expect_type=RebrickableTranslation,
+                    )
         return None
 
     def _in_rebrickable_context(self) -> bool:
-        tabs = self.query_one("#main-tabs", expect_type=TabbedContent)
-        if tabs.active == "rebrickable":
-            return True
-        if tabs.active != "model":
-            return False
-        return (
-            self.query_one("#model-tabs", expect_type=TabbedContent).active
-            == "tab-rebrickable"
-        )
+        return self._active_rebrickable_widget() is not None
 
     def _selected_rebrickable_identifier(self) -> str | None:
-        tabs = self.query_one("#main-tabs", expect_type=TabbedContent)
-        if tabs.active == "rebrickable":
-            return self.query_one(
-                "#rebrickable-view", expect_type=RebrickableView
-            ).selected_identifier
-        if tabs.active == "model":
-            model_tabs = self.query_one("#model-tabs", expect_type=TabbedContent)
-            if model_tabs.active == "tab-rebrickable":
-                return self.query_one(
-                    "#rebrickable-translation",
-                    expect_type=RebrickableTranslation,
-                ).selected_identifier
-        return None
+        widget = self._active_rebrickable_widget()
+        return widget.selected_identifier if widget is not None else None
 
     def action_open_model_prompt(self) -> None:
         """Prompt for a model path and open it in the Model tab."""

@@ -25,16 +25,21 @@ SNAPSHOT_DIR = Path(__file__).parent / "__snapshots__"
 SIZE = (120, 40)
 
 
+def _normalize(svg: str) -> str:
+    """Drop per-line trailing whitespace so editor stripping cannot break baselines."""
+    return "\n".join(line.rstrip() for line in svg.splitlines())
+
+
 def _check(app: PyldrawTuiApp, name: str) -> None:
     """Compare the app screenshot against the stored baseline."""
     app.clear_notifications()
-    svg = app.export_screenshot()
+    svg = _normalize(app.export_screenshot())
     baseline = SNAPSHOT_DIR / f"{name}.svg"
     if os.environ.get("SNAPSHOT_UPDATE") == "1" or not baseline.exists():
         SNAPSHOT_DIR.mkdir(exist_ok=True)
         baseline.write_text(svg)
         return
-    if svg != baseline.read_text():
+    if svg != _normalize(baseline.read_text()):
         (SNAPSHOT_DIR / f"{name}.new.svg").write_text(svg)
         pytest.fail(
             f"snapshot {name!r} changed; inspect {name}.new.svg and rerun "
@@ -103,7 +108,9 @@ async def test_snapshot_rebrickable_catalog(make_app):
     app = make_app()
     async with app.run_test(size=SIZE) as pilot:
         await wait_for_catalog(app, pilot)
-        app.query_one("#main-tabs", expect_type=TabbedContent).active = "rebrickable"
+        # Use the real key binding so focus lands on the results table
+        # deterministically instead of lingering on the hidden Catalog pane.
+        await pilot.press("3")
         await app.workers.wait_for_complete()
         await pilot.pause()
         _check(app, "rebrickable_catalog")

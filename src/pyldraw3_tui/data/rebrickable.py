@@ -14,6 +14,7 @@ from rebrickable import (
     CatalogState,
     Config,
     Inventory,
+    MappingStatus,
     Part,
     PartCategory,
     RebrickableClient,
@@ -39,6 +40,7 @@ if TYPE_CHECKING:
     from ldraw.bom import BomRow
     from ldraw.parts import Parts
     from rebrickable import RefreshReport, SearchResult, TranslatedBomRow
+    from rebrickable.api.query_types import UsersPartsListQuery, UsersSetsListQuery
     from rebrickable.progress import ProgressCallback
 
 
@@ -344,58 +346,55 @@ class RebrickableData:
         token = self._token()
         match kind:
             case CollectionKind.SETS:
+                sets_query: UsersSetsListQuery = {
+                    "page": page,
+                    "page_size": page_size,
+                }
                 if query:
-                    result = await client.list_user_sets(
-                        user_token=token,
-                        page=page,
-                        page_size=page_size,
-                        search=query,
-                    )
-                else:
-                    result = await client.list_user_sets(
-                        user_token=token,
-                        page=page,
-                        page_size=page_size,
-                    )
+                    sets_query["search"] = query
+                result = await client.list_user_sets(
+                    user_token=token,
+                    **sets_query,
+                )
                 rows = tuple(
                     [
                         CollectionRow(
-                            item.set_num,
-                            await self._local_set_name(item.set_num),
-                            f"quantity {item.quantity} · spares "
-                            f"{'included' if item.include_spares else 'excluded'}",
-                            EntityKind.SET,
-                            item.set_num,
-                            item,
+                            key=item.set_num,
+                            title=await self._local_set_name(item.set_num),
+                            subtitle=(
+                                f"quantity {item.quantity} · spares "
+                                f"{'included' if item.include_spares else 'excluded'}"
+                            ),
+                            entity_kind=EntityKind.SET,
+                            entity_id=item.set_num,
+                            upstream=item,
                         )
                         for item in result.results
                     ]
                 )
             case CollectionKind.PARTS:
+                parts_query: UsersPartsListQuery = {
+                    "page": page,
+                    "page_size": page_size,
+                    "inc_part_details": True,
+                }
                 if query:
-                    result = await client.list_user_parts(
-                        user_token=token,
-                        page=page,
-                        page_size=page_size,
-                        inc_part_details=True,
-                        search=query,
-                    )
-                else:
-                    result = await client.list_user_parts(
-                        user_token=token,
-                        page=page,
-                        page_size=page_size,
-                        inc_part_details=True,
-                    )
+                    parts_query["search"] = query
+                result = await client.list_user_parts(
+                    user_token=token,
+                    **parts_query,
+                )
                 rows = tuple(
                     CollectionRow(
-                        f"{item.part.part_num}:{item.color.id}",
-                        item.part.name,
-                        f"{item.part.part_num} · {item.color.name} · "
-                        f"quantity {item.quantity}",
-                        EntityKind.PART,
-                        item.part.part_num,
-                        item,
+                        key=f"{item.part.part_num}:{item.color.id}",
+                        title=item.part.name,
+                        subtitle=(
+                            f"{item.part.part_num} · {item.color.name} · "
+                            f"quantity {item.quantity}"
+                        ),
+                        entity_kind=EntityKind.PART,
+                        entity_id=item.part.part_num,
+                        upstream=item,
                     )
                     for item in result.results
                 )
@@ -407,9 +406,9 @@ class RebrickableData:
                 )
                 rows = tuple(
                     CollectionRow(
-                        str(item.id),
-                        item.name,
-                        (
+                        key=str(item.id),
+                        title=item.name,
+                        subtitle=(
                             f"{item.num_parts} parts"
                             if item.num_parts is not None
                             else "unknown parts"
@@ -426,9 +425,9 @@ class RebrickableData:
                 )
                 rows = tuple(
                     CollectionRow(
-                        str(item.id),
-                        item.name,
-                        (
+                        key=str(item.id),
+                        title=item.name,
+                        subtitle=(
                             f"{item.num_sets} sets"
                             if item.num_sets is not None
                             else "unknown sets"
@@ -437,6 +436,9 @@ class RebrickableData:
                     )
                     for item in result.results
                 )
+            case _:
+                msg = f"unsupported collection kind: {kind!r}"
+                raise ValueError(msg)
         return CollectionPage(
             rows,
             result.count,
@@ -456,61 +458,74 @@ class RebrickableData:
         """Fetch one bounded page from a personal part or set list."""
         client = self._live()
         token = self._token()
-        if kind is CollectionKind.PART_LISTS:
-            result = await client.list_user_part_list_parts(
-                list_id,
-                user_token=token,
-                page=page,
-                page_size=page_size,
-                inc_part_details=True,
-                inc_color_details=True,
-            )
-            rows_list: list[CollectionRow] = []
-            for item in result.results:
-                part_num = item.part_num or (
-                    item.part.part_num if item.part is not None else ""
+        match kind:
+            case CollectionKind.PART_LISTS:
+                result = await client.list_user_part_list_parts(
+                    list_id,
+                    user_token=token,
+                    page=page,
+                    page_size=page_size,
+                    inc_part_details=True,
+                    inc_color_details=True,
                 )
-                color_id = item.color_id
-                if color_id is None and item.color is not None:
-                    color_id = item.color.id
-                rows_list.append(
-                    CollectionRow(
-                        f"{part_num}:{color_id if color_id is not None else ''}",
-                        item.part.name
-                        if item.part is not None
-                        else (item.part_num or "part"),
-                        f"quantity {item.quantity}"
-                        + (f" · {item.color.name}" if item.color is not None else ""),
-                        EntityKind.PART,
-                        part_num or None,
-                        item,
+                rows_list: list[CollectionRow] = []
+                for item in result.results:
+                    part_num = item.part_num or (
+                        item.part.part_num if item.part is not None else ""
                     )
+                    color_id = item.color_id
+                    if color_id is None and item.color is not None:
+                        color_id = item.color.id
+                    rows_list.append(
+                        CollectionRow(
+                            key=(
+                                f"{part_num}:{color_id if color_id is not None else ''}"
+                            ),
+                            title=(
+                                item.part.name
+                                if item.part is not None
+                                else (item.part_num or "part")
+                            ),
+                            subtitle=(
+                                f"quantity {item.quantity}"
+                                + (
+                                    f" · {item.color.name}"
+                                    if item.color is not None
+                                    else ""
+                                )
+                            ),
+                            entity_kind=EntityKind.PART,
+                            entity_id=part_num or None,
+                            upstream=item,
+                        )
+                    )
+                rows = tuple(rows_list)
+            case CollectionKind.SET_LISTS:
+                result = await client.list_user_set_list_sets(
+                    list_id,
+                    user_token=token,
+                    page=page,
+                    page_size=page_size,
                 )
-            rows = tuple(rows_list)
-        elif kind is CollectionKind.SET_LISTS:
-            result = await client.list_user_set_list_sets(
-                list_id,
-                user_token=token,
-                page=page,
-                page_size=page_size,
-            )
-            rows = tuple(
-                [
-                    CollectionRow(
-                        item.set_num,
-                        await self._local_set_name(item.set_num),
-                        f"quantity {item.quantity} · spares "
-                        f"{'included' if item.include_spares else 'excluded'}",
-                        EntityKind.SET,
-                        item.set_num,
-                        item,
-                    )
-                    for item in result.results
-                ]
-            )
-        else:
-            msg = "only part and set lists have list contents"
-            raise ValueError(msg)
+                rows = tuple(
+                    [
+                        CollectionRow(
+                            key=item.set_num,
+                            title=await self._local_set_name(item.set_num),
+                            subtitle=(
+                                f"quantity {item.quantity} · spares "
+                                f"{'included' if item.include_spares else 'excluded'}"
+                            ),
+                            entity_kind=EntityKind.SET,
+                            entity_id=item.set_num,
+                            upstream=item,
+                        )
+                        for item in result.results
+                    ]
+                )
+            case _:
+                msg = "only part and set lists have list contents"
+                raise ValueError(msg)
         return CollectionPage(
             rows,
             result.count,
@@ -533,13 +548,19 @@ class RebrickableData:
         client = self._live()
         bridge = (await self._local()).ldraw
         requests = 0
-        if row.part_match.status.value != "resolved":
+        if row.part_match.status is not MappingStatus.RESOLVED:
             for candidate in row.part_match.candidates:
-                await bridge.enrich_part_mapping(candidate.identifier, client)
+                await bridge.enrich_part_mapping(
+                    part_num=candidate.identifier,
+                    client=client,
+                )
                 requests += 1
-        if row.color_match.status.value != "resolved":
+        if row.color_match.status is not MappingStatus.RESOLVED:
             for candidate in row.color_match.candidates:
-                await bridge.enrich_color_mapping(int(candidate.identifier), client)
+                await bridge.enrich_color_mapping(
+                    color_id=int(candidate.identifier),
+                    client=client,
+                )
                 requests += 1
         return requests
 

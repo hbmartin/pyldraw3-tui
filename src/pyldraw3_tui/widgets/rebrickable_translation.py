@@ -6,7 +6,7 @@
 from __future__ import annotations
 
 import asyncio
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, cast
 
 from rebrickable import MappingStatus, TranslationReport, part_url
 from rich.text import Text
@@ -23,6 +23,7 @@ if TYPE_CHECKING:
     from ldraw.parts import Parts
     from rebrickable import TranslatedBomRow
     from textual.app import ComposeResult
+    from textual.worker import Worker
 
     from pyldraw3_tui.data.rebrickable import RebrickableDataProtocol
 
@@ -161,6 +162,7 @@ class RebrickableTranslation(Vertical):
             self._generation += 1
             self._report = None
             self._rows_by_key = {}
+            self._selected_key = None
             self.query_one("#rb-translation-table", expect_type=DataTable).clear()
             self.query_one("#rb-translation-summary", expect_type=Static).update(
                 "The displayed BOM is empty."
@@ -168,6 +170,7 @@ class RebrickableTranslation(Vertical):
             self.query_one("#rb-translation-detail", expect_type=Static).update(
                 "No translated row selected."
             )
+            self.query_one("#rb-enrich-row", expect_type=Button).disabled = True
             return
         self._start_translation()
 
@@ -196,15 +199,19 @@ class RebrickableTranslation(Vertical):
     def _set_working(self, *, working: bool) -> None:
         self.set_class(working, "working")
 
-    def _start_translation(self):  # noqa: ANN202
+    def _start_translation(self) -> Worker[None]:
         self._generation += 1
-        return self._translate(
-            self._generation,
-            self._bom_rows,
-            self._parts,
+        # Cast: ty resolves the @work decorator's async overload imprecisely.
+        return cast(
+            "Worker[None]",
+            self._translate(
+                self._generation,
+                self._bom_rows,
+                self._parts,
+            ),
         )
 
-    @work(group="rb-translation")
+    @work(exclusive=True, group="rb-translation")
     async def _translate(
         self,
         generation: int,
@@ -229,11 +236,17 @@ class RebrickableTranslation(Vertical):
         except Exception as error:  # noqa: BLE001
             if generation == self._generation:
                 self._report = None
+                self._rows_by_key = {}
+                self._selected_key = None
                 self.query_one("#rb-translation-summary", expect_type=Static).update(
                     f"[red]Translation unavailable:[/] {error}. "
                     "Open Rebrickable and refresh its local catalog if needed."
                 )
                 self.query_one("#rb-translation-table", expect_type=DataTable).clear()
+                self.query_one("#rb-translation-detail", expect_type=Static).update(
+                    "No translated row selected."
+                )
+                self.query_one("#rb-enrich-row", expect_type=Button).disabled = True
         else:
             if generation == self._generation:
                 self._show_report(report)

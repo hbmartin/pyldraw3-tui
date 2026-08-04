@@ -198,10 +198,11 @@ pyldraw3-tui
 ```
 
 Read-only personal collection views additionally require a Rebrickable user token. Set
-`REBRICKABLE_USER_TOKEN` or enter an existing token in the masked **Token** prompt; prompted tokens
-remain in memory only for the current run. Neither credential is written by the TUI. Live reads are
-explicit and paced conservatively; after a rate-limit response the client honors the server's retry
-delay and the TUI reports the failure without immediately retrying in a loop.
+`REBRICKABLE_USER_TOKEN` or, while the Rebrickable view is in Collection mode, enter an existing
+token in the masked **Token** prompt; prompted tokens remain in memory only for the current run.
+Neither credential is written by the TUI. Live reads are explicit and paced conservatively; after
+a rate-limit response the client honors the server's retry delay and the TUI reports the failure
+without immediately retrying in a loop.
 
 ## Key bindings
 

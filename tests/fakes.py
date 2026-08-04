@@ -8,6 +8,7 @@ from __future__ import annotations
 
 from datetime import UTC, datetime
 from pathlib import Path
+from typing import TYPE_CHECKING
 
 from rebrickable import (
     CatalogState,
@@ -43,6 +44,7 @@ from rebrickable.api.models import (
     ApiPart,
     ApiSet,
 )
+from rebrickable.progress import ProgressEvent, ProgressStage
 
 from pyldraw3_tui.data.rebrickable import (
     CollectionKind,
@@ -53,6 +55,13 @@ from pyldraw3_tui.data.rebrickable import (
     LiveDetails,
     LiveSetInventory,
 )
+
+if TYPE_CHECKING:
+    from collections.abc import Iterable
+
+    from ldraw.bom import BomRow
+    from ldraw.parts import Parts
+    from rebrickable.progress import ProgressCallback
 
 PARTS = (
     Part("3001", "Brick 2 x 4", 11, "Plastic"),
@@ -114,10 +123,14 @@ class FakeRebrickableData:
             retrieved_at=datetime(2026, 8, 2, tzinfo=UTC),
         )
 
-    async def refresh(self, *, progress=None) -> RefreshReport:
+    async def refresh(
+        self,
+        *,
+        progress: ProgressCallback | None = None,
+    ) -> RefreshReport:
         self.calls.append("refresh")
         if progress is not None:
-            progress(type("Event", (), {"message": "Done", "dataset": None})())
+            progress(ProgressEvent(stage=ProgressStage.DONE, message="Done"))
         self.status = CatalogStatus.READY
         return RefreshReport(
             RefreshOutcome.UPDATED,
@@ -126,7 +139,14 @@ class FakeRebrickableData:
             (),
         )
 
-    async def search(self, kind, query, *, limit, offset) -> SearchResult:
+    async def search(
+        self,
+        kind: EntityKind,
+        query: str,
+        *,
+        limit: int,
+        offset: int,
+    ) -> SearchResult:
         self.calls.append(f"search:{kind.value}:{query}:{limit}:{offset}")
         entities = PARTS if kind is EntityKind.PART else SETS
         kind_value = SearchKind.PART if kind is EntityKind.PART else SearchKind.SET
@@ -153,7 +173,7 @@ class FakeRebrickableData:
         )
         return SearchResult(hits, len(matches), "fixture-snapshot")
 
-    async def details(self, kind, identifier) -> EntityDetails:
+    async def details(self, kind: EntityKind, identifier: str) -> EntityDetails:
         self.calls.append(f"details:{kind.value}:{identifier}")
         if kind is EntityKind.PART:
             part = next(item for item in PARTS if item.part_num == identifier)
@@ -165,7 +185,7 @@ class FakeRebrickableData:
             theme=Theme(lego_set.theme_id, "Space", None),
         )
 
-    async def inventory(self, set_num) -> Inventory:
+    async def inventory(self, set_num: str) -> Inventory:
         self.calls.append(f"inventory:{set_num}")
         return Inventory(
             set_num,
@@ -194,7 +214,7 @@ class FakeRebrickableData:
             ),
         )
 
-    async def live_details(self, kind, identifier) -> LiveDetails:
+    async def live_details(self, kind: EntityKind, identifier: str) -> LiveDetails:
         self.calls.append(f"live_details:{kind.value}:{identifier}")
         if kind is EntityKind.PART:
             return LiveDetails(
@@ -218,7 +238,7 @@ class FakeRebrickableData:
             ),
         )
 
-    async def live_set_inventory(self, set_num) -> LiveSetInventory:
+    async def live_set_inventory(self, set_num: str) -> LiveSetInventory:
         self.calls.append(f"live_inventory:{set_num}")
         return LiveSetInventory(
             (
@@ -233,7 +253,14 @@ class FakeRebrickableData:
             (ApiInventorySet(set_num="497-1", quantity=1),),
         )
 
-    async def collection_page(self, kind, *, page, page_size, query) -> CollectionPage:
+    async def collection_page(
+        self,
+        kind: CollectionKind,
+        *,
+        page: int,
+        page_size: int,
+        query: str,
+    ) -> CollectionPage:
         self.calls.append(f"collection:{kind.value}:{page}:{page_size}:{query}")
         rows = {
             CollectionKind.SETS: (
@@ -260,7 +287,12 @@ class FakeRebrickableData:
         return CollectionPage(rows, len(rows), page, False, page > 1)
 
     async def collection_list_page(
-        self, kind, list_id, *, page, page_size
+        self,
+        kind: CollectionKind,
+        list_id: int,
+        *,
+        page: int,
+        page_size: int,
     ) -> CollectionPage:
         self.calls.append(f"list:{kind.value}:{list_id}:{page}:{page_size}")
         if kind is CollectionKind.PART_LISTS:
@@ -281,13 +313,18 @@ class FakeRebrickableData:
             )
         return CollectionPage((row,), 1, page, False, False)
 
-    async def translate(self, rows, *, parts) -> TranslationReport:
+    async def translate(
+        self,
+        rows: Iterable[BomRow],
+        *,
+        parts: Parts | None,
+    ) -> TranslationReport:
         del parts
         self.calls.append("translate")
         translated = []
         for source in rows:
             part = str(source.part)
-            color = int(source.colour_code)
+            color = source.colour_code if source.colour_code is not None else -1
             part_match = PartMatch(
                 part,
                 part,
@@ -348,7 +385,7 @@ class FakeRebrickableData:
             "fixture-snapshot",
         )
 
-    async def enrich_row(self, row) -> int:
+    async def enrich_row(self, row: TranslatedBomRow) -> int:
         count = len(row.part_match.candidates) + len(row.color_match.candidates)
         self.calls.append(f"enrich:{count}")
         return count
