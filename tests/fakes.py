@@ -8,6 +8,7 @@ from __future__ import annotations
 
 from datetime import UTC, datetime
 from pathlib import Path
+from typing import TYPE_CHECKING
 
 from rebrickable import (
     CatalogState,
@@ -43,6 +44,7 @@ from rebrickable.api.models import (
     ApiPart,
     ApiSet,
 )
+from rebrickable.progress import ProgressEvent, ProgressStage
 
 from pyldraw3_tui.data.rebrickable import (
     CollectionKind,
@@ -54,31 +56,56 @@ from pyldraw3_tui.data.rebrickable import (
     LiveSetInventory,
 )
 
+if TYPE_CHECKING:
+    from collections.abc import Iterable
+
+    from ldraw.bom import BomRow
+    from ldraw.parts import Parts
+    from rebrickable.progress import ProgressCallback
+
 PARTS = (
-    Part("3001", "Brick 2 x 4", 11, "Plastic"),
-    Part("3022", "Plate 2 x 2", 14, "Plastic"),
+    Part(part_num="3001", name="Brick 2 x 4", category_id=11, material="Plastic"),
+    Part(part_num="3022", name="Plate 2 x 2", category_id=14, material="Plastic"),
 )
 SETS = (
     Set(
-        "10497-1",
-        "Galaxy Explorer",
-        2022,
-        721,
-        1254,
-        "https://cdn.rebrickable.com/media/sets/10497-1.jpg",
+        set_num="10497-1",
+        name="Galaxy Explorer",
+        year=2022,
+        theme_id=721,
+        num_parts=1254,
+        image_url="https://cdn.rebrickable.com/media/sets/10497-1.jpg",
     ),
     Set(
-        "497-1",
-        "Galaxy Explorer",
-        1979,
-        130,
-        338,
-        "https://cdn.rebrickable.com/media/sets/497-1.jpg",
+        set_num="497-1",
+        name="Galaxy Explorer",
+        year=1979,
+        theme_id=130,
+        num_parts=338,
+        image_url="https://cdn.rebrickable.com/media/sets/497-1.jpg",
     ),
 )
 COLORS = {
-    4: Color(4, "Red", "C91A09", False, 100, 100, 1950, 2026),
-    15: Color(15, "White", "FFFFFF", False, 100, 100, 1950, 2026),
+    4: Color(
+        id=4,
+        name="Red",
+        rgb="C91A09",
+        is_trans=False,
+        num_parts=100,
+        num_sets=100,
+        year_from=1950,
+        year_to=2026,
+    ),
+    15: Color(
+        id=15,
+        name="White",
+        rgb="FFFFFF",
+        is_trans=False,
+        num_parts=100,
+        num_sets=100,
+        year_from=1950,
+        year_to=2026,
+    ),
 }
 
 
@@ -114,10 +141,14 @@ class FakeRebrickableData:
             retrieved_at=datetime(2026, 8, 2, tzinfo=UTC),
         )
 
-    async def refresh(self, *, progress=None) -> RefreshReport:
+    async def refresh(
+        self,
+        *,
+        progress: ProgressCallback | None = None,
+    ) -> RefreshReport:
         self.calls.append("refresh")
         if progress is not None:
-            progress(type("Event", (), {"message": "Done", "dataset": None})())
+            progress(ProgressEvent(stage=ProgressStage.DONE, message="Done"))
         self.status = CatalogStatus.READY
         return RefreshReport(
             RefreshOutcome.UPDATED,
@@ -126,7 +157,14 @@ class FakeRebrickableData:
             (),
         )
 
-    async def search(self, kind, query, *, limit, offset) -> SearchResult:
+    async def search(
+        self,
+        kind: EntityKind,
+        query: str,
+        *,
+        limit: int,
+        offset: int,
+    ) -> SearchResult:
         self.calls.append(f"search:{kind.value}:{query}:{limit}:{offset}")
         entities = PARTS if kind is EntityKind.PART else SETS
         kind_value = SearchKind.PART if kind is EntityKind.PART else SearchKind.SET
@@ -153,7 +191,7 @@ class FakeRebrickableData:
         )
         return SearchResult(hits, len(matches), "fixture-snapshot")
 
-    async def details(self, kind, identifier) -> EntityDetails:
+    async def details(self, kind: EntityKind, identifier: str) -> EntityDetails:
         self.calls.append(f"details:{kind.value}:{identifier}")
         if kind is EntityKind.PART:
             part = next(item for item in PARTS if item.part_num == identifier)
@@ -165,7 +203,7 @@ class FakeRebrickableData:
             theme=Theme(lego_set.theme_id, "Space", None),
         )
 
-    async def inventory(self, set_num) -> Inventory:
+    async def inventory(self, set_num: str) -> Inventory:
         self.calls.append(f"inventory:{set_num}")
         return Inventory(
             set_num,
@@ -194,7 +232,7 @@ class FakeRebrickableData:
             ),
         )
 
-    async def live_details(self, kind, identifier) -> LiveDetails:
+    async def live_details(self, kind: EntityKind, identifier: str) -> LiveDetails:
         self.calls.append(f"live_details:{kind.value}:{identifier}")
         if kind is EntityKind.PART:
             return LiveDetails(
@@ -218,7 +256,7 @@ class FakeRebrickableData:
             ),
         )
 
-    async def live_set_inventory(self, set_num) -> LiveSetInventory:
+    async def live_set_inventory(self, set_num: str) -> LiveSetInventory:
         self.calls.append(f"live_inventory:{set_num}")
         return LiveSetInventory(
             (
@@ -233,61 +271,94 @@ class FakeRebrickableData:
             (ApiInventorySet(set_num="497-1", quantity=1),),
         )
 
-    async def collection_page(self, kind, *, page, page_size, query) -> CollectionPage:
+    async def collection_page(
+        self,
+        kind: CollectionKind,
+        *,
+        page: int,
+        page_size: int,
+        query: str,
+    ) -> CollectionPage:
         self.calls.append(f"collection:{kind.value}:{page}:{page_size}:{query}")
         rows = {
             CollectionKind.SETS: (
                 CollectionRow(
-                    "10497-1",
-                    "Galaxy Explorer",
-                    "quantity 1",
-                    EntityKind.SET,
-                    "10497-1",
+                    key="10497-1",
+                    title="Galaxy Explorer",
+                    subtitle="quantity 1",
+                    entity_kind=EntityKind.SET,
+                    entity_id="10497-1",
                 ),
             ),
             CollectionKind.PARTS: (
                 CollectionRow(
-                    "3001:4",
-                    "Brick 2 x 4",
-                    "Red · quantity 2",
-                    EntityKind.PART,
-                    "3001",
+                    key="3001:4",
+                    title="Brick 2 x 4",
+                    subtitle="Red · quantity 2",
+                    entity_kind=EntityKind.PART,
+                    entity_id="3001",
                 ),
             ),
-            CollectionKind.PART_LISTS: (CollectionRow("7", "Wanted parts", "2 parts"),),
-            CollectionKind.SET_LISTS: (CollectionRow("9", "Space sets", "1 set"),),
+            CollectionKind.PART_LISTS: (
+                CollectionRow(key="7", title="Wanted parts", subtitle="2 parts"),
+            ),
+            CollectionKind.SET_LISTS: (
+                CollectionRow(key="9", title="Space sets", subtitle="1 set"),
+            ),
         }[kind]
-        return CollectionPage(rows, len(rows), page, False, page > 1)
+        return CollectionPage(
+            rows=rows,
+            total=len(rows),
+            page=page,
+            has_next=False,
+            has_previous=page > 1,
+        )
 
     async def collection_list_page(
-        self, kind, list_id, *, page, page_size
+        self,
+        kind: CollectionKind,
+        list_id: int,
+        *,
+        page: int,
+        page_size: int,
     ) -> CollectionPage:
         self.calls.append(f"list:{kind.value}:{list_id}:{page}:{page_size}")
         if kind is CollectionKind.PART_LISTS:
             row = CollectionRow(
-                "3001:4",
-                "Brick 2 x 4",
-                "quantity 2",
-                EntityKind.PART,
-                "3001",
+                key="3001:4",
+                title="Brick 2 x 4",
+                subtitle="quantity 2",
+                entity_kind=EntityKind.PART,
+                entity_id="3001",
             )
         else:
             row = CollectionRow(
-                "10497-1",
-                "Galaxy Explorer",
-                "quantity 1",
-                EntityKind.SET,
-                "10497-1",
+                key="10497-1",
+                title="Galaxy Explorer",
+                subtitle="quantity 1",
+                entity_kind=EntityKind.SET,
+                entity_id="10497-1",
             )
-        return CollectionPage((row,), 1, page, False, False)
+        return CollectionPage(
+            rows=(row,),
+            total=1,
+            page=page,
+            has_next=False,
+            has_previous=False,
+        )
 
-    async def translate(self, rows, *, parts) -> TranslationReport:
+    async def translate(
+        self,
+        rows: Iterable[BomRow],
+        *,
+        parts: Parts | None,
+    ) -> TranslationReport:
         del parts
         self.calls.append("translate")
         translated = []
         for source in rows:
             part = str(source.part)
-            color = int(source.colour_code)
+            color = source.colour_code if source.colour_code is not None else -1
             part_match = PartMatch(
                 part,
                 part,
@@ -348,7 +419,7 @@ class FakeRebrickableData:
             "fixture-snapshot",
         )
 
-    async def enrich_row(self, row) -> int:
+    async def enrich_row(self, row: TranslatedBomRow) -> int:
         count = len(row.part_match.candidates) + len(row.color_match.candidates)
         self.calls.append(f"enrich:{count}")
         return count

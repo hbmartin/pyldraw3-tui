@@ -149,7 +149,7 @@ The app is organised around its three top tabs.
 
 - **Browse without an API key** — local part/set search, metadata, newest set inventories, public
   page links, and LDraw translation use the downloaded snapshot and perform no network I/O.
-- **Refresh explicitly** — the TUI downloads and transactionally promotes all 12 catalog datasets
+- **Refresh explicitly** — the TUI downloads and transactionally promotes every catalog dataset
   only after you confirm Refresh. A failed or cancelled refresh leaves the prior snapshot active.
 - **Fetch live data deliberately** — a selected part or set can fetch fresh details, and sets can
   separately fetch their live inventory. These actions use the library's paced API client.
@@ -185,7 +185,7 @@ Windows uses the equivalent `%LOCALAPPDATA%` locations.
 
 Rebrickable data uses the platform-standard `rebrickable` application-data and cache directories,
 separate from the LDraw library above. Open the **Rebrickable** tab and choose **Refresh** once to
-download the 12 public CSV datasets (currently about 18 MB compressed and roughly 275 MB as a local
+download the public CSV datasets (currently about 18 MB compressed and roughly 275 MB as a local
 SQLite snapshot). This refresh does not require an API key; subsequent browsing, inventories, page
 links, exports, and LDraw translation are offline.
 
@@ -198,10 +198,11 @@ pyldraw3-tui
 ```
 
 Read-only personal collection views additionally require a Rebrickable user token. Set
-`REBRICKABLE_USER_TOKEN` or enter an existing token in the masked **Token** prompt; prompted tokens
-remain in memory only for the current run. Neither credential is written by the TUI. Live reads are
-explicit and paced conservatively; after a rate-limit response the client honors the server's retry
-delay and the TUI reports the failure without immediately retrying in a loop.
+`REBRICKABLE_USER_TOKEN` or, while the Rebrickable view is in Collection mode, enter an existing
+token in the masked **Token** prompt; prompted tokens remain in memory only for the current run.
+Neither credential is written by the TUI. Live reads are explicit and paced conservatively; after
+a rate-limit response the client honors the server's retry delay and the TUI reports the failure
+without immediately retrying in a loop.
 
 ## Key bindings
 

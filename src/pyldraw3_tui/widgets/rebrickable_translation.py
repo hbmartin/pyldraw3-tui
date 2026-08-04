@@ -6,7 +6,7 @@
 from __future__ import annotations
 
 import asyncio
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, cast
 
 from rebrickable import MappingStatus, TranslationReport, part_url
 from rich.text import Text
@@ -23,6 +23,7 @@ if TYPE_CHECKING:
     from ldraw.parts import Parts
     from rebrickable import TranslatedBomRow
     from textual.app import ComposeResult
+    from textual.worker import Worker
 
     from pyldraw3_tui.data.rebrickable import RebrickableDataProtocol
 
@@ -161,6 +162,7 @@ class RebrickableTranslation(Vertical):
             self._generation += 1
             self._report = None
             self._rows_by_key = {}
+            self._selected_key = None
             self.query_one("#rb-translation-table", expect_type=DataTable).clear()
             self.query_one("#rb-translation-summary", expect_type=Static).update(
                 "The displayed BOM is empty."
@@ -168,6 +170,7 @@ class RebrickableTranslation(Vertical):
             self.query_one("#rb-translation-detail", expect_type=Static).update(
                 "No translated row selected."
             )
+            self.query_one("#rb-enrich-row", expect_type=Button).disabled = True
             return
         self._start_translation()
 
@@ -196,15 +199,19 @@ class RebrickableTranslation(Vertical):
     def _set_working(self, *, working: bool) -> None:
         self.set_class(working, "working")
 
-    def _start_translation(self):  # noqa: ANN202
+    def _start_translation(self) -> Worker[None]:
         self._generation += 1
-        return self._translate(
-            self._generation,
-            self._bom_rows,
-            self._parts,
+        # Cast: ty resolves the @work decorator's async overload imprecisely.
+        return cast(
+            "Worker[None]",
+            self._translate(
+                self._generation,
+                self._bom_rows,
+                self._parts,
+            ),
         )
 
-    @work(group="rb-translation")
+    @work(exclusive=True, group="rb-translation")
     async def _translate(
         self,
         generation: int,
@@ -229,11 +236,17 @@ class RebrickableTranslation(Vertical):
         except Exception as error:  # noqa: BLE001
             if generation == self._generation:
                 self._report = None
+                self._rows_by_key = {}
+                self._selected_key = None
                 self.query_one("#rb-translation-summary", expect_type=Static).update(
                     f"[red]Translation unavailable:[/] {error}. "
                     "Open Rebrickable and refresh its local catalog if needed."
                 )
                 self.query_one("#rb-translation-table", expect_type=DataTable).clear()
+                self.query_one("#rb-translation-detail", expect_type=Static).update(
+                    "No translated row selected."
+                )
+                self.query_one("#rb-enrich-row", expect_type=Button).disabled = True
         else:
             if generation == self._generation:
                 self._show_report(report)
@@ -272,10 +285,23 @@ class RebrickableTranslation(Vertical):
             f"Resolved {report.resolved_count} · Ambiguous {report.ambiguous_count} · "
             f"Unresolved {report.unresolved_count} · snapshot {report.snapshot_id}"
         )
-        if self._selected_key is None:
-            self.query_one("#rb-translation-detail", expect_type=Static).update(
-                "No translated row selected."
-            )
+        # Refresh the pane from _selected_key rather than relying on the
+        # RowHighlighted that clear() plus the first add_row happens to emit:
+        # that emission is a DataTable implementation detail, and it never
+        # arrives at all for an empty report, which would strand the enrich
+        # button enabled for the previous report's row.
+        table.move_cursor(row=0)
+        self._show_selected_row()
+
+    def _show_selected_row(self) -> None:
+        detail = self.query_one("#rb-translation-detail", expect_type=Static)
+        button = self.query_one("#rb-enrich-row", expect_type=Button)
+        if (row := self.selected_row) is None:
+            detail.update("No translated row selected.")
+            button.disabled = True
+            return
+        detail.update(_match_detail(row))
+        button.disabled = self._candidate_request_count(row) == 0
 
     @staticmethod
     def _source_label(source: str) -> str:
@@ -290,15 +316,7 @@ class RebrickableTranslation(Vertical):
     def _row_highlighted(self, event: DataTable.RowHighlighted) -> None:
         event.stop()
         self._selected_key = event.row_key.value if event.row_key is not None else None
-        row = self.selected_row
-        detail = self.query_one("#rb-translation-detail", expect_type=Static)
-        button = self.query_one("#rb-enrich-row", expect_type=Button)
-        if row is None:
-            detail.update("No translated row selected.")
-            button.disabled = True
-            return
-        detail.update(_match_detail(row))
-        button.disabled = self._candidate_request_count(row) == 0
+        self._show_selected_row()
 
     @staticmethod
     def _candidate_request_count(row: TranslatedBomRow) -> int:

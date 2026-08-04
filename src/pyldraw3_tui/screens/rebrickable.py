@@ -6,10 +6,12 @@
 from __future__ import annotations
 
 import asyncio
+from enum import StrEnum
 from typing import TYPE_CHECKING, ClassVar
 
 from rebrickable import CatalogStatus, Part, part_url, set_url
 from rebrickable.api.models import ApiPart
+from rebrickable.catalog.importers import DATASETS
 from rich.text import Text
 from textual import on, work
 from textual.binding import Binding
@@ -31,17 +33,24 @@ from pyldraw3_tui.data.rebrickable import (
     EntityDetails,
     EntityKind,
     LiveDetails,
-    LiveSetInventory,
     RebrickableDataProtocol,
 )
 from pyldraw3_tui.screens.chooser import ChooserScreen
 
 if TYPE_CHECKING:
+    from rebrickable.progress import ProgressEvent
     from textual.app import ComposeResult
     from textual.timer import Timer
 
 _PAGE_SIZE = 100
 _SEARCH_DEBOUNCE = 0.15
+
+
+class BrowseMode(StrEnum):
+    """Top-level Rebrickable browser modes."""
+
+    CATALOG = "catalog"
+    COLLECTION = "collection"
 
 
 class UserTokenScreen(ModalScreen[str | None]):
@@ -238,7 +247,7 @@ class RebrickableView(Vertical):
         self._data = data
         self._config_error = config_error
         self._ready = False
-        self._mode = "catalog"
+        self._mode = BrowseMode.CATALOG
         self._entity_kind = EntityKind.PART
         self._collection_kind = CollectionKind.SETS
         self._page = 1
@@ -248,7 +257,6 @@ class RebrickableView(Vertical):
         self._selected_key: str | None = None
         self._selected_details: EntityDetails | None = None
         self._live_cache: dict[tuple[EntityKind, str], LiveDetails] = {}
-        self._live_inventory_cache: dict[str, LiveSetInventory] = {}
         self._contents_list_id: int | None = None
         self._contents_page = 1
         self._contents_has_next = False
@@ -258,8 +266,11 @@ class RebrickableView(Vertical):
         """Lay out source controls, results, details, and bounded paging."""
         with Horizontal(id="rb-toolbar"):
             yield Select[str](
-                [("Catalog", "catalog"), ("Collection", "collection")],
-                value="catalog",
+                [
+                    ("Catalog", BrowseMode.CATALOG),
+                    ("Collection", BrowseMode.COLLECTION),
+                ],
+                value=BrowseMode.CATALOG,
                 allow_blank=False,
                 id="rb-mode",
             )
@@ -320,7 +331,7 @@ class RebrickableView(Vertical):
         """Return the selected entity's locally constructed public page URL."""
         if self._selected_details is not None:
             return self._selected_details.page_url
-        if self._mode == "catalog" and self._selected_key is not None:
+        if self._mode is BrowseMode.CATALOG and self._selected_key is not None:
             if self._entity_kind is EntityKind.PART:
                 return part_url(self._selected_key)
             return set_url(self._selected_key)
@@ -331,7 +342,7 @@ class RebrickableView(Vertical):
     def selected_identifier(self) -> str | None:
         if self._selected_details is not None:
             return self._selected_details.identifier
-        if self._mode == "catalog":
+        if self._mode is BrowseMode.CATALOG:
             return self._selected_key
         selected = self._selected_collection_row()
         return selected.entity_id if selected is not None else None
@@ -380,11 +391,11 @@ class RebrickableView(Vertical):
                 f"{diagnostics}. Use Refresh to download it without an API key."
             )
         self._sync_controls()
-        if self._mode == "collection" or self._ready:
+        if self._mode is BrowseMode.COLLECTION or self._ready:
             self._query()
 
     def _sync_controls(self) -> None:
-        catalog = self._mode == "catalog"
+        catalog = self._mode is BrowseMode.CATALOG
         self.query_one("#rb-refresh", expect_type=Button).display = catalog
         self.query_one("#rb-token", expect_type=Button).display = not catalog
         is_set = (
@@ -398,15 +409,11 @@ class RebrickableView(Vertical):
         self.query_one("#rb-live-inventory", expect_type=Button).display = (
             catalog and is_set
         )
-        self.query_one("#rb-list-contents", expect_type=Button).display = (
-            not catalog
-            and self._collection_kind
-            in {CollectionKind.PART_LISTS, CollectionKind.SET_LISTS}
-        )
         list_mode = not catalog and self._collection_kind in {
             CollectionKind.PART_LISTS,
             CollectionKind.SET_LISTS,
         }
+        self.query_one("#rb-list-contents", expect_type=Button).display = list_mode
         previous = self.query_one("#rb-contents-previous", expect_type=Button)
         next_button = self.query_one("#rb-contents-next", expect_type=Button)
         previous.display = list_mode
@@ -418,11 +425,13 @@ class RebrickableView(Vertical):
     @on(Select.Changed, "#rb-mode")
     def _mode_changed(self, event: Select.Changed) -> None:
         event.stop()
-        if not isinstance(event.value, str):
+        try:
+            mode = BrowseMode(event.value)
+        except (TypeError, ValueError):
             return
-        self._mode = event.value
+        self._mode = mode
         kind = self.query_one("#rb-kind", expect_type=Select)
-        if self._mode == "catalog":
+        if self._mode is BrowseMode.CATALOG:
             options = [
                 ("Parts", EntityKind.PART.value),
                 ("Sets", EntityKind.SET.value),
@@ -450,7 +459,7 @@ class RebrickableView(Vertical):
         event.stop()
         if not isinstance(event.value, str):
             return
-        if self._mode == "catalog":
+        if self._mode is BrowseMode.CATALOG:
             self._entity_kind = EntityKind(event.value)
         else:
             self._collection_kind = CollectionKind(event.value)
@@ -462,7 +471,7 @@ class RebrickableView(Vertical):
 
     def _sync_search_placeholder(self) -> None:
         search = self.query_one("#rb-search", expect_type=Input)
-        if self._mode == "catalog":
+        if self._mode is BrowseMode.CATALOG:
             label = "parts" if self._entity_kind is EntityKind.PART else "sets"
             search.placeholder = f"search {label}…"
             search.disabled = False
@@ -493,10 +502,10 @@ class RebrickableView(Vertical):
         data = self._data
         if data is None:
             return
-        if self._mode == "catalog" and not self._ready:
+        if self._mode is BrowseMode.CATALOG and not self._ready:
             self._set_rows(())
             return
-        if self._mode == "collection":
+        if self._mode is BrowseMode.COLLECTION:
             if not data.api_key_available:
                 self.query_one("#rb-state", expect_type=Static).update(
                     "Set REBRICKABLE_API_KEY to read the live collection."
@@ -512,7 +521,7 @@ class RebrickableView(Vertical):
         self._set_working(working=True, message="Loading Rebrickable data…")
         query = self.query_one("#rb-search", expect_type=Input).value.strip()
         try:
-            if self._mode == "catalog":
+            if self._mode is BrowseMode.CATALOG:
                 result = await data.search(
                     self._entity_kind,
                     query,
@@ -566,6 +575,9 @@ class RebrickableView(Vertical):
 
     def _set_rows(self, rows: tuple[tuple[str, str, str], ...]) -> None:
         self._rows = {}
+        if not rows:
+            self._total = 0
+            self._has_next = False
         self._render_rows(rows)
 
     def _render_rows(self, rows: tuple[tuple[str, str, str], ...]) -> None:
@@ -574,6 +586,9 @@ class RebrickableView(Vertical):
         for key, title, subtitle in rows:
             table.add_row(key, title, subtitle, key=key)
         self._selected_key = rows[0][0] if rows else None
+        # Drop the previous page's entity so yank/open cannot act on it before
+        # the next RowHighlighted repopulates the selection.
+        self._selected_details = None
         if not rows:
             self._clear_detail()
         self._sync_page_buttons()
@@ -585,7 +600,7 @@ class RebrickableView(Vertical):
         self._selected_key = key
         if key is None:
             self._clear_detail()
-        elif self._mode == "catalog":
+        elif self._mode is BrowseMode.CATALOG:
             self._load_details(key)
         else:
             self._show_collection_row()
@@ -679,7 +694,7 @@ class RebrickableView(Vertical):
         event.stop()
         options = [
             (
-                "Download/refresh all 12 catalog datasets",
+                f"Download/refresh all {len(DATASETS)} catalog datasets",
                 "refresh",
             ),
             ("Cancel", "cancel"),
@@ -703,16 +718,12 @@ class RebrickableView(Vertical):
             message="Starting explicit catalog refresh…",
         )
 
-        def progress(event: object) -> None:
-            message = str(getattr(event, "message", ""))
-            dataset = getattr(event, "dataset", None)
-            current = getattr(event, "current", None)
-            total = getattr(event, "total", None)
-            label = message or str(getattr(event, "stage", "refresh"))
-            if dataset:
-                label = f"{label}: {dataset}"
-            if current is not None and total:
-                label = f"{label} ({current}/{total})"
+        def progress(event: ProgressEvent) -> None:
+            label = event.message or event.stage.value
+            if event.dataset:
+                label = f"{label}: {event.dataset}"
+            if event.current is not None and event.total:
+                label = f"{label} ({event.current}/{event.total})"
             self.query_one("#rb-state", expect_type=Static).update(label)
 
         try:
@@ -870,7 +881,6 @@ class RebrickableView(Vertical):
                 f"[red]Live inventory failed:[/] {error}"
             )
         else:
-            self._live_inventory_cache[set_num] = inventory
             rows = [
                 (
                     item.part.part_num,
@@ -909,10 +919,14 @@ class RebrickableView(Vertical):
     def _list_contents_pressed(self, event: Button.Pressed) -> None:
         event.stop()
         row = self._selected_collection_row()
-        if row is not None:
-            self._contents_list_id = int(row.key)
-            self._contents_page = 1
-            self._load_list_contents()
+        if row is None or not row.key.isdecimal():
+            self.query_one("#rb-state", expect_type=Static).update(
+                "Select a part list or set list to load its contents."
+            )
+            return
+        self._contents_list_id = int(row.key)
+        self._contents_page = 1
+        self._load_list_contents()
 
     @on(Button.Pressed, "#rb-contents-previous")
     def _contents_previous(self, event: Button.Pressed) -> None:

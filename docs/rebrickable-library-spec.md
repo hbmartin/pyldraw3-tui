@@ -47,7 +47,9 @@ The implementation must encode these upstream constraints:
 
 The project must vendor a dated copy of the Swagger document for reproducible parity tests.
 The document retrieved on 2026-08-01 had SHA-256
-`91b49e310f8fb2db4ff7474e2775921897e10319a71ec053cac61f3a40fa7cb6`. A nightly github action run should retrieve the upstream and regenerate and open PR as needed
+`91b49e310f8fb2db4ff7474e2775921897e10319a71ec053cac61f3a40fa7cb6`.
+A nightly GitHub Actions run should retrieve the upstream document, regenerate bindings,
+and open a PR as needed.
 
 ## 3. Product decisions
 
@@ -187,9 +189,10 @@ Recommended runtime dependencies:
 - `httpx2` for asynchronous HTTP and streaming downloads;
 - `platformdirs` for OS-standard configuration, cache, and data locations;
 - `PyYAML` for non-secret configuration;
-- `aiosqlite` or similiar for async catalog reads and transaction control.
-- `pydantic` for API payloads (request and response bodies) - must be
-- `datamodel-code-generator` to generate pydantic models from the swagger doc
+- `aiosqlite` or similar for async catalog reads and transaction control;
+- `pydantic` for API payloads, with additive-field tolerance and structured decode
+  errors;
+- `datamodel-code-generator` to generate Pydantic models from the Swagger document.
 
 `pyldraw3` belongs in an optional `ldraw` extra. Core translation records and algorithms
 must not require it.
@@ -892,7 +895,7 @@ or stdin and never from argv.
 
 Consider alternatively:An analogous CLI could offer:
 
-```
+```text
 rebrickable download
 rebrickable catalog status
 rebrickable parts search
@@ -916,7 +919,7 @@ only the safe subset above.
 
 Do not represent a part with just a string. Use typed references:
 
-```
+```python
 PartRef("ldraw", "2412b")
 PartRef("rebrickable", "2412b")
 PartRef("lego", "4211414")
@@ -925,7 +928,7 @@ PartRef("bricklink", "2412b")
 
 Likewise, colors should include their namespace:
 
-```
+```python
 ColorRef("ldraw", 4)
 ColorRef("rebrickable", 4)
 ```
@@ -934,7 +937,7 @@ Red happens to be ID 4 in both systems, but the library must never assume color 
 
 Useful operations:
 
-```
+```python
 catalog.resolve_part(PartRef("ldraw", "2412b"))
 catalog.resolve_color(ColorRef("ldraw", 4))
 catalog.external_ids(part)
@@ -954,7 +957,7 @@ Resolution results should distinguish:
 
 This is the key workflow from the Scout build:
 
-```
+```python
 result = catalog.check_part_color(
     PartRef("ldraw", "99780"),
     ColorRef("ldraw", 4),
@@ -963,7 +966,7 @@ result = catalog.check_part_color(
 
 Return structured evidence, rather than only `True` or `False`:
 
-```
+```python
 PartColorAvailability(
     available=True,
     rebrickable_part="99780",
@@ -990,7 +993,7 @@ That prevents “manufactured in this color” from being confused with “curre
 
 Create a `Bom` type with deterministic normalization:
 
-```
+```python
 bom = Bom.from_csv("model-bom.csv")
 report = catalog.validate_bom(
     bom,
@@ -1013,7 +1016,7 @@ It should support:
 
 For this project, a report could have directly stated:
 
-```
+```text
 360 occurrences
 107 part/color combinations
 36 red part IDs checked
@@ -1025,7 +1028,7 @@ For this project, a report could have directly stated:
 
 LEGO identifiers frequently have mold revisions and aliases. Model this as a graph rather than a single replacement field:
 
-```
+```python
 catalog.substitutes(
     part,
     direction="both",

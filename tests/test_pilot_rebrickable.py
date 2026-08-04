@@ -2,10 +2,14 @@
 
 from __future__ import annotations
 
-from rebrickable import CatalogStatus
+import asyncio
+
+from rebrickable import CatalogStatus, TranslationReport
 from textual.widgets import Button, DataTable, Input, Select, Static, TabbedContent
 
 import pyldraw3_tui.app as app_module
+from pyldraw3_tui.data.rebrickable import CollectionKind, CollectionRow, EntityKind
+from pyldraw3_tui.screens.model import ROOT_KEY
 from pyldraw3_tui.screens.rebrickable import RebrickableView, UserTokenScreen
 from pyldraw3_tui.widgets.rebrickable_translation import RebrickableTranslation
 from tests.fakes import FakeRebrickableData
@@ -26,6 +30,7 @@ async def test_offline_part_browse_needs_no_live_api(make_app, fake_rebrickable)
         assert not any(
             call.startswith("collection:") for call in fake_rebrickable.calls
         )
+    assert fake_rebrickable.closed
 
 
 async def test_rebrickable_search_and_locally_constructed_page(
@@ -105,11 +110,17 @@ async def test_collection_uses_masked_session_token(make_app):
     async with app.run_test(size=(120, 40)) as pilot:
         await wait_for_catalog(app, pilot)
         await pilot.press("3")
+        view = app.query_one("#rebrickable-view", expect_type=RebrickableView)
+        view._total = 201  # noqa: SLF001 - exercise stale async UI state
+        view._has_next = True  # noqa: SLF001 - exercise stale async UI state
         app.query_one("#rb-mode", expect_type=Select).value = "collection"
         await pilot.pause()
         await app.workers.wait_for_complete()
         status = str(app.query_one("#rb-state", expect_type=Static).render())
         assert "REBRICKABLE_USER_TOKEN" in status
+        page = str(app.query_one("#rb-page-label", expect_type=Static).render())
+        assert "0 rows" in page
+        assert app.query_one("#rb-next", expect_type=Button).disabled
 
         await pilot.click("#rb-token")
         assert isinstance(app.screen, UserTokenScreen)
@@ -121,6 +132,32 @@ async def test_collection_uses_masked_session_token(make_app):
         assert fake.user_token_available
         assert "set_user_token" in fake.calls
         assert app.query_one("#rb-results", expect_type=DataTable).row_count == 1
+
+
+async def test_stale_non_list_selection_is_ignored(
+    make_app,
+    fake_rebrickable,
+) -> None:
+    app = make_app()
+    async with app.run_test(size=(120, 40)) as pilot:
+        await wait_for_catalog(app, pilot)
+        view = app.query_one("#rebrickable-view", expect_type=RebrickableView)
+        stale_row = CollectionRow(
+            key="10497-1",
+            title="Galaxy Explorer",
+            subtitle="quantity 1",
+            entity_kind=EntityKind.SET,
+            entity_id="10497-1",
+        )
+        view._rows = {stale_row.key: stale_row}  # noqa: SLF001
+        view._selected_key = stale_row.key  # noqa: SLF001
+        view._collection_kind = CollectionKind.PART_LISTS  # noqa: SLF001
+
+        button = app.query_one("#rb-list-contents", expect_type=Button)
+        view._list_contents_pressed(Button.Pressed(button))  # noqa: SLF001
+
+        assert view._contents_list_id is None  # noqa: SLF001
+        assert not any(call.startswith("list:") for call in fake_rebrickable.calls)
 
 
 async def test_missing_catalog_can_be_explicitly_refreshed(make_app):
@@ -191,6 +228,118 @@ async def test_translation_follows_selected_submodel(make_app, spaceship_mpd):
         await app.workers.wait_for_complete()
         assert translation.report is not None
         assert len(translation.report.rows) == 2
+
+
+async def test_translation_detail_tracks_each_new_report(make_app, spaceship_mpd):
+    app = make_app(model_path=spaceship_mpd)
+    async with app.run_test(size=(120, 40)) as pilot:
+        await wait_for_catalog(app, pilot)
+        translation = app.query_one(
+            "#rebrickable-translation", expect_type=RebrickableTranslation
+        )
+        detail = app.query_one("#rb-translation-detail", expect_type=Static)
+        assert translation.report is not None
+        first = translation.report.rows[0]
+        assert f"LDraw {first.ldraw_part_num}" in str(detail.render())
+
+        # Replacing the report leaves the cursor on row 0, so the pane must
+        # follow the new first row without a cursor movement to prompt it.
+        app.query_one("#submodel-select", expect_type=Select).value = "wing.ldr"
+        await pilot.pause()
+        await app.workers.wait_for_complete()
+        assert translation.report is not None
+        replaced = translation.report.rows[0]
+        assert replaced.ldraw_part_num != first.ldraw_part_num
+        assert translation.selected_row == replaced
+        assert f"LDraw {replaced.ldraw_part_num}" in str(detail.render())
+
+
+async def test_translation_clear_paths_drop_stale_selection(
+    make_app,
+    spaceship_mpd,
+    fake_rebrickable,
+    monkeypatch,
+) -> None:
+    app = make_app(model_path=spaceship_mpd)
+    async with app.run_test(size=(120, 40)) as pilot:
+        await wait_for_catalog(app, pilot)
+        translation = app.query_one(
+            "#rebrickable-translation", expect_type=RebrickableTranslation
+        )
+        table = app.query_one("#rb-translation-table", expect_type=DataTable)
+        table.move_cursor(row=2)
+        await pilot.pause()
+        assert translation.selected_page_url is not None
+
+        bom_rows = translation._bom_rows  # noqa: SLF001
+        parts = translation._parts  # noqa: SLF001
+        original_translate = fake_rebrickable.translate
+
+        async def fail_translate(rows, *, parts) -> None:
+            del rows, parts
+            msg = "fixture translation failure"
+            raise RuntimeError(msg)
+
+        monkeypatch.setattr(fake_rebrickable, "translate", fail_translate)
+        translation.set_bom(bom_rows, parts)
+        await app.workers.wait_for_complete()
+
+        assert translation.report is None
+        assert translation.selected_row is None
+        assert translation.selected_identifier is None
+        assert translation.selected_page_url is None
+        assert table.row_count == 0
+        assert app.query_one("#rb-enrich-row", expect_type=Button).disabled
+
+        monkeypatch.setattr(fake_rebrickable, "translate", original_translate)
+        translation.set_bom(bom_rows, parts)
+        await app.workers.wait_for_complete()
+        table.move_cursor(row=2)
+        await pilot.pause()
+        assert translation.selected_row is not None
+
+        translation.set_bom((), parts)
+        assert translation.report is None
+        assert translation.selected_row is None
+        assert translation.selected_identifier is None
+        assert translation.selected_page_url is None
+        assert table.row_count == 0
+        assert app.query_one("#rb-enrich-row", expect_type=Button).disabled
+
+
+async def test_rapid_submodel_switches_apply_only_latest_translation(
+    make_app,
+    spaceship_mpd,
+    fake_rebrickable,
+    monkeypatch,
+) -> None:
+    app = make_app(model_path=spaceship_mpd)
+    async with app.run_test(size=(120, 40)) as pilot:
+        await wait_for_catalog(app, pilot)
+        translation = app.query_one(
+            "#rebrickable-translation", expect_type=RebrickableTranslation
+        )
+        assert translation.report is not None
+        baseline = fake_rebrickable.calls.count("translate")
+        original_translate = fake_rebrickable.translate
+
+        async def slow_translate(rows, *, parts) -> TranslationReport:
+            await asyncio.sleep(0.05)
+            return await original_translate(rows, parts=parts)
+
+        monkeypatch.setattr(fake_rebrickable, "translate", slow_translate)
+        submodel = app.query_one("#submodel-select", expect_type=Select)
+        submodel.value = "wing.ldr"
+        submodel.value = ROOT_KEY
+
+        for _ in range(100):
+            await pilot.pause(0.02)
+            if fake_rebrickable.calls.count("translate") > baseline:
+                break
+        await pilot.pause(0.1)
+
+        assert translation.report is not None
+        assert len(translation.report.rows) == 3
 
 
 async def test_selected_translation_row_verifies_only_its_candidates(
