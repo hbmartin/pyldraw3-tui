@@ -5,6 +5,7 @@
 
 from __future__ import annotations
 
+import asyncio
 import os
 from dataclasses import dataclass
 from enum import StrEnum
@@ -223,6 +224,7 @@ class RebrickableData:
         self._session: RebrickableSession | None = None
         self._client: RebrickableClient | None = None
         self._user_token = os.environ.get("REBRICKABLE_USER_TOKEN") or None
+        self._session_lock = asyncio.Lock()
 
     @property
     def api_key_available(self) -> bool:
@@ -240,9 +242,16 @@ class RebrickableData:
         self._user_token = normalized or None
 
     async def _local(self) -> RebrickableSession:
-        if self._session is None:
-            self._session = await RebrickableSession.open(self.config)
-        return self._session
+        # Concurrent workers share this instance, so the open must not race:
+        # a second session would silently replace the first and leak it past
+        # close(). RebrickableSession.open happens not to suspend today, but
+        # that is an upstream detail this boundary should not depend on.
+        if self._session is not None:
+            return self._session
+        async with self._session_lock:
+            if self._session is None:
+                self._session = await RebrickableSession.open(self.config)
+            return self._session
 
     def _live(self) -> RebrickableClient:
         if self._client is not None:

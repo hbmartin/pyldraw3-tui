@@ -285,10 +285,23 @@ class RebrickableTranslation(Vertical):
             f"Resolved {report.resolved_count} · Ambiguous {report.ambiguous_count} · "
             f"Unresolved {report.unresolved_count} · snapshot {report.snapshot_id}"
         )
-        if self._selected_key is None:
-            self.query_one("#rb-translation-detail", expect_type=Static).update(
-                "No translated row selected."
-            )
+        # Refresh the pane from _selected_key rather than relying on the
+        # RowHighlighted that clear() plus the first add_row happens to emit:
+        # that emission is a DataTable implementation detail, and it never
+        # arrives at all for an empty report, which would strand the enrich
+        # button enabled for the previous report's row.
+        table.move_cursor(row=0)
+        self._show_selected_row()
+
+    def _show_selected_row(self) -> None:
+        detail = self.query_one("#rb-translation-detail", expect_type=Static)
+        button = self.query_one("#rb-enrich-row", expect_type=Button)
+        if (row := self.selected_row) is None:
+            detail.update("No translated row selected.")
+            button.disabled = True
+            return
+        detail.update(_match_detail(row))
+        button.disabled = self._candidate_request_count(row) == 0
 
     @staticmethod
     def _source_label(source: str) -> str:
@@ -303,15 +316,7 @@ class RebrickableTranslation(Vertical):
     def _row_highlighted(self, event: DataTable.RowHighlighted) -> None:
         event.stop()
         self._selected_key = event.row_key.value if event.row_key is not None else None
-        row = self.selected_row
-        detail = self.query_one("#rb-translation-detail", expect_type=Static)
-        button = self.query_one("#rb-enrich-row", expect_type=Button)
-        if row is None:
-            detail.update("No translated row selected.")
-            button.disabled = True
-            return
-        detail.update(_match_detail(row))
-        button.disabled = self._candidate_request_count(row) == 0
+        self._show_selected_row()
 
     @staticmethod
     def _candidate_request_count(row: TranslatedBomRow) -> int:

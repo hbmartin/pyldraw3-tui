@@ -64,30 +64,48 @@ if TYPE_CHECKING:
     from rebrickable.progress import ProgressCallback
 
 PARTS = (
-    Part("3001", "Brick 2 x 4", 11, "Plastic"),
-    Part("3022", "Plate 2 x 2", 14, "Plastic"),
+    Part(part_num="3001", name="Brick 2 x 4", category_id=11, material="Plastic"),
+    Part(part_num="3022", name="Plate 2 x 2", category_id=14, material="Plastic"),
 )
 SETS = (
     Set(
-        "10497-1",
-        "Galaxy Explorer",
-        2022,
-        721,
-        1254,
-        "https://cdn.rebrickable.com/media/sets/10497-1.jpg",
+        set_num="10497-1",
+        name="Galaxy Explorer",
+        year=2022,
+        theme_id=721,
+        num_parts=1254,
+        image_url="https://cdn.rebrickable.com/media/sets/10497-1.jpg",
     ),
     Set(
-        "497-1",
-        "Galaxy Explorer",
-        1979,
-        130,
-        338,
-        "https://cdn.rebrickable.com/media/sets/497-1.jpg",
+        set_num="497-1",
+        name="Galaxy Explorer",
+        year=1979,
+        theme_id=130,
+        num_parts=338,
+        image_url="https://cdn.rebrickable.com/media/sets/497-1.jpg",
     ),
 )
 COLORS = {
-    4: Color(4, "Red", "C91A09", False, 100, 100, 1950, 2026),
-    15: Color(15, "White", "FFFFFF", False, 100, 100, 1950, 2026),
+    4: Color(
+        id=4,
+        name="Red",
+        rgb="C91A09",
+        is_trans=False,
+        num_parts=100,
+        num_sets=100,
+        year_from=1950,
+        year_to=2026,
+    ),
+    15: Color(
+        id=15,
+        name="White",
+        rgb="FFFFFF",
+        is_trans=False,
+        num_parts=100,
+        num_sets=100,
+        year_from=1950,
+        year_to=2026,
+    ),
 }
 
 
@@ -265,26 +283,36 @@ class FakeRebrickableData:
         rows = {
             CollectionKind.SETS: (
                 CollectionRow(
-                    "10497-1",
-                    "Galaxy Explorer",
-                    "quantity 1",
-                    EntityKind.SET,
-                    "10497-1",
+                    key="10497-1",
+                    title="Galaxy Explorer",
+                    subtitle="quantity 1",
+                    entity_kind=EntityKind.SET,
+                    entity_id="10497-1",
                 ),
             ),
             CollectionKind.PARTS: (
                 CollectionRow(
-                    "3001:4",
-                    "Brick 2 x 4",
-                    "Red · quantity 2",
-                    EntityKind.PART,
-                    "3001",
+                    key="3001:4",
+                    title="Brick 2 x 4",
+                    subtitle="Red · quantity 2",
+                    entity_kind=EntityKind.PART,
+                    entity_id="3001",
                 ),
             ),
-            CollectionKind.PART_LISTS: (CollectionRow("7", "Wanted parts", "2 parts"),),
-            CollectionKind.SET_LISTS: (CollectionRow("9", "Space sets", "1 set"),),
+            CollectionKind.PART_LISTS: (
+                CollectionRow(key="7", title="Wanted parts", subtitle="2 parts"),
+            ),
+            CollectionKind.SET_LISTS: (
+                CollectionRow(key="9", title="Space sets", subtitle="1 set"),
+            ),
         }[kind]
-        return CollectionPage(rows, len(rows), page, False, page > 1)
+        return CollectionPage(
+            rows=rows,
+            total=len(rows),
+            page=page,
+            has_next=False,
+            has_previous=page > 1,
+        )
 
     async def collection_list_page(
         self,
@@ -297,21 +325,27 @@ class FakeRebrickableData:
         self.calls.append(f"list:{kind.value}:{list_id}:{page}:{page_size}")
         if kind is CollectionKind.PART_LISTS:
             row = CollectionRow(
-                "3001:4",
-                "Brick 2 x 4",
-                "quantity 2",
-                EntityKind.PART,
-                "3001",
+                key="3001:4",
+                title="Brick 2 x 4",
+                subtitle="quantity 2",
+                entity_kind=EntityKind.PART,
+                entity_id="3001",
             )
         else:
             row = CollectionRow(
-                "10497-1",
-                "Galaxy Explorer",
-                "quantity 1",
-                EntityKind.SET,
-                "10497-1",
+                key="10497-1",
+                title="Galaxy Explorer",
+                subtitle="quantity 1",
+                entity_kind=EntityKind.SET,
+                entity_id="10497-1",
             )
-        return CollectionPage((row,), 1, page, False, False)
+        return CollectionPage(
+            rows=(row,),
+            total=1,
+            page=page,
+            has_next=False,
+            has_previous=False,
+        )
 
     async def translate(
         self,

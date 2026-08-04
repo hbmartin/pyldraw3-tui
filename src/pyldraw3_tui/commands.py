@@ -55,22 +55,22 @@ class PyldrawTuiCommands(Provider):
         yield (
             "Copy Rebrickable translation as CSV",
             "copy_translation_csv",
-            "Yank the complete displayed translation",
+            "Yank the complete displayed translation as CSV",
         )
         yield (
             "Copy Rebrickable translation as JSON",
             "copy_translation_json",
-            "Yank the complete displayed translation",
+            "Yank the complete displayed translation as JSON",
         )
         yield (
             "Copy incomplete Rebrickable translation as CSV",
             "copy_incomplete_translation_csv",
-            "Yank ambiguous and unresolved translation rows",
+            "Yank ambiguous and unresolved translation rows as CSV",
         )
         yield (
             "Copy incomplete Rebrickable translation as JSON",
             "copy_incomplete_translation_json",
-            "Yank ambiguous and unresolved translation rows",
+            "Yank ambiguous and unresolved translation rows as JSON",
         )
         yield ("Help", "help", "Show the key-binding reference")
         yield ("Quit", "quit", "Exit pyldraw3-tui")

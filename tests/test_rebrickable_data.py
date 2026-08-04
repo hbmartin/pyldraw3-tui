@@ -22,17 +22,32 @@ if TYPE_CHECKING:
 
 
 def test_entity_and_collection_page_urls_are_constructed_locally() -> None:
-    part = EntityDetails(EntityKind.PART, Part("3001", "Brick", 11, "Plastic"))
+    part = EntityDetails(
+        kind=EntityKind.PART,
+        entity=Part(
+            part_num="3001",
+            name="Brick",
+            category_id=11,
+            material="Plastic",
+        ),
+    )
     lego_set = EntityDetails(
-        EntityKind.SET,
-        Set("10497-1", "Galaxy Explorer", 2022, 721, 1254, "https://image"),
+        kind=EntityKind.SET,
+        entity=Set(
+            set_num="10497-1",
+            name="Galaxy Explorer",
+            year=2022,
+            theme_id=721,
+            num_parts=1254,
+            image_url="https://image",
+        ),
     )
     collection = CollectionRow(
-        "10497-1",
-        "Galaxy Explorer",
-        "quantity 1",
-        EntityKind.SET,
-        "10497-1",
+        key="10497-1",
+        title="Galaxy Explorer",
+        subtitle="quantity 1",
+        entity_kind=EntityKind.SET,
+        entity_id="10497-1",
     )
 
     assert part.page_url == "https://rebrickable.com/parts/3001/"

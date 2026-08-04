@@ -230,6 +230,30 @@ async def test_translation_follows_selected_submodel(make_app, spaceship_mpd):
         assert len(translation.report.rows) == 2
 
 
+async def test_translation_detail_tracks_each_new_report(make_app, spaceship_mpd):
+    app = make_app(model_path=spaceship_mpd)
+    async with app.run_test(size=(120, 40)) as pilot:
+        await wait_for_catalog(app, pilot)
+        translation = app.query_one(
+            "#rebrickable-translation", expect_type=RebrickableTranslation
+        )
+        detail = app.query_one("#rb-translation-detail", expect_type=Static)
+        assert translation.report is not None
+        first = translation.report.rows[0]
+        assert f"LDraw {first.ldraw_part_num}" in str(detail.render())
+
+        # Replacing the report leaves the cursor on row 0, so the pane must
+        # follow the new first row without a cursor movement to prompt it.
+        app.query_one("#submodel-select", expect_type=Select).value = "wing.ldr"
+        await pilot.pause()
+        await app.workers.wait_for_complete()
+        assert translation.report is not None
+        replaced = translation.report.rows[0]
+        assert replaced.ldraw_part_num != first.ldraw_part_num
+        assert translation.selected_row == replaced
+        assert f"LDraw {replaced.ldraw_part_num}" in str(detail.render())
+
+
 async def test_translation_clear_paths_drop_stale_selection(
     make_app,
     spaceship_mpd,
