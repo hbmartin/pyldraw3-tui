@@ -59,6 +59,13 @@ class UserTokenUnavailableError(RuntimeError):
         super().__init__("a Rebrickable user token is required")
 
 
+class SessionClosedError(RuntimeError):
+    """A read was requested after the data boundary was closed."""
+
+    def __init__(self) -> None:
+        super().__init__("the Rebrickable data boundary is closed")
+
+
 class EntityKind(StrEnum):
     """Rebrickable entity kinds exposed by the catalog browser."""
 
@@ -225,6 +232,7 @@ class RebrickableData:
         self._client: RebrickableClient | None = None
         self._user_token = os.environ.get("REBRICKABLE_USER_TOKEN") or None
         self._session_lock = asyncio.Lock()
+        self._closed = False
 
     @property
     def api_key_available(self) -> bool:
@@ -246,14 +254,22 @@ class RebrickableData:
         # a second session would silently replace the first and leak it past
         # close(). RebrickableSession.open happens not to suspend today, but
         # that is an upstream detail this boundary should not depend on.
-        if self._session is not None:
-            return self._session
+        # close() holds the same lock, so an open that begins during shutdown
+        # waits and then fails instead of leaving an unclosed session behind.
+        if (session := self._session) is not None:
+            return session
         async with self._session_lock:
+            if self._closed:
+                raise SessionClosedError
             if self._session is None:
                 self._session = await RebrickableSession.open(self.config)
             return self._session
 
     def _live(self) -> RebrickableClient:
+        # Synchronous, so this never interleaves with close()'s awaits: the
+        # flag close() sets before its first await is always visible here.
+        if self._closed:
+            raise SessionClosedError
         if self._client is not None:
             return self._client
         api_key = self.config.api_key
@@ -575,10 +591,12 @@ class RebrickableData:
 
     async def close(self) -> None:
         """Close live and local resources and discard session credentials."""
-        if self._client is not None:
-            await self._client.close()
-            self._client = None
-        if self._session is not None:
-            await self._session.close()
-            self._session = None
+        async with self._session_lock:
+            self._closed = True
+            if self._client is not None:
+                await self._client.close()
+                self._client = None
+            if self._session is not None:
+                await self._session.close()
+                self._session = None
         self._user_token = None
