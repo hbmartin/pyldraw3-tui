@@ -14,6 +14,7 @@ from pyldraw3_tui.data.rebrickable import (
     EntityKind,
     LiveApiUnavailableError,
     RebrickableData,
+    SessionClosedError,
     UserTokenUnavailableError,
 )
 
@@ -91,6 +92,25 @@ async def test_collection_read_without_user_token_fails_before_network(
             )
     finally:
         await data.close()
+
+
+async def test_reads_after_close_never_reopen_resources(tmp_path: Path) -> None:
+    data = RebrickableData(
+        Config(
+            database_path=tmp_path / "catalog.sqlite",
+            cache_path=tmp_path / "cache",
+            api_key="api-secret",
+        )
+    )
+    await data.close()
+
+    # A worker that outlives shutdown must fail rather than open a session or
+    # client that nothing is left to close.
+    with pytest.raises(SessionClosedError):
+        await data.state()
+    with pytest.raises(SessionClosedError):
+        await data.live_details(EntityKind.PART, "3001")
+    assert not (tmp_path / "catalog.sqlite").exists()
 
 
 async def test_user_token_is_environment_or_memory_only(

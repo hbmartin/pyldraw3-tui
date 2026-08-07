@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import asyncio
+from typing import TYPE_CHECKING, NoReturn
 
 from rebrickable import CatalogStatus, TranslationReport
 from textual.widgets import Button, DataTable, Input, Select, Static, TabbedContent
@@ -14,6 +15,18 @@ from pyldraw3_tui.screens.rebrickable import RebrickableView, UserTokenScreen
 from pyldraw3_tui.widgets.rebrickable_translation import RebrickableTranslation
 from tests.fakes import FakeRebrickableData
 from tests.helpers import wait_for_catalog
+
+if TYPE_CHECKING:
+    from collections.abc import Callable, Iterable
+    from pathlib import Path
+
+    import pytest
+    from ldraw.bom import BomRow
+    from ldraw.parts import Parts
+
+    from pyldraw3_tui.app import PyldrawTuiApp
+
+    MakeApp = Callable[..., PyldrawTuiApp]
 
 
 async def test_offline_part_browse_needs_no_live_api(make_app, fake_rebrickable):
@@ -135,8 +148,8 @@ async def test_collection_uses_masked_session_token(make_app):
 
 
 async def test_stale_non_list_selection_is_ignored(
-    make_app,
-    fake_rebrickable,
+    make_app: MakeApp,
+    fake_rebrickable: FakeRebrickableData,
 ) -> None:
     app = make_app()
     async with app.run_test(size=(120, 40)) as pilot:
@@ -230,7 +243,10 @@ async def test_translation_follows_selected_submodel(make_app, spaceship_mpd):
         assert len(translation.report.rows) == 2
 
 
-async def test_translation_detail_tracks_each_new_report(make_app, spaceship_mpd):
+async def test_translation_detail_tracks_each_new_report(
+    make_app: MakeApp,
+    spaceship_mpd: Path,
+) -> None:
     app = make_app(model_path=spaceship_mpd)
     async with app.run_test(size=(120, 40)) as pilot:
         await wait_for_catalog(app, pilot)
@@ -255,10 +271,10 @@ async def test_translation_detail_tracks_each_new_report(make_app, spaceship_mpd
 
 
 async def test_translation_clear_paths_drop_stale_selection(
-    make_app,
-    spaceship_mpd,
-    fake_rebrickable,
-    monkeypatch,
+    make_app: MakeApp,
+    spaceship_mpd: Path,
+    fake_rebrickable: FakeRebrickableData,
+    monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     app = make_app(model_path=spaceship_mpd)
     async with app.run_test(size=(120, 40)) as pilot:
@@ -275,7 +291,11 @@ async def test_translation_clear_paths_drop_stale_selection(
         parts = translation._parts  # noqa: SLF001
         original_translate = fake_rebrickable.translate
 
-        async def fail_translate(rows, *, parts) -> None:
+        async def fail_translate(
+            rows: Iterable[BomRow],
+            *,
+            parts: Parts | None,
+        ) -> NoReturn:
             del rows, parts
             msg = "fixture translation failure"
             raise RuntimeError(msg)
@@ -308,10 +328,10 @@ async def test_translation_clear_paths_drop_stale_selection(
 
 
 async def test_rapid_submodel_switches_apply_only_latest_translation(
-    make_app,
-    spaceship_mpd,
-    fake_rebrickable,
-    monkeypatch,
+    make_app: MakeApp,
+    spaceship_mpd: Path,
+    fake_rebrickable: FakeRebrickableData,
+    monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     app = make_app(model_path=spaceship_mpd)
     async with app.run_test(size=(120, 40)) as pilot:
@@ -323,7 +343,11 @@ async def test_rapid_submodel_switches_apply_only_latest_translation(
         baseline = fake_rebrickable.calls.count("translate")
         original_translate = fake_rebrickable.translate
 
-        async def slow_translate(rows, *, parts) -> TranslationReport:
+        async def slow_translate(
+            rows: Iterable[BomRow],
+            *,
+            parts: Parts | None,
+        ) -> TranslationReport:
             await asyncio.sleep(0.05)
             return await original_translate(rows, parts=parts)
 
