@@ -5,11 +5,11 @@ from __future__ import annotations
 from pathlib import Path
 from typing import TYPE_CHECKING
 
-from ldraw.errors import PartError
 from rich.text import Text
 from textual import work
 from textual.containers import Vertical, VerticalScroll
 from textual.widgets import Static, TabbedContent, TabPane
+from textual.worker import get_current_worker
 
 from pyldraw3_tui.data.snippets import import_snippet
 from pyldraw3_tui.widgets.colour_swatches import ColourSwatches
@@ -48,7 +48,7 @@ def _geometry_lines(geometry: PartGeometry) -> list[tuple[str, str]]:
     if geometry.bounds is not None:
         size = geometry.bounds.size
         lines.append(("size", size_label([size.x, size.y, size.z])))
-    top_studs = sum(stud.is_top_stud for stud in geometry.studs)
+    top_studs = len(geometry.top_studs)
     if top_studs:
         lines.append(("studs", f"{top_studs} top"))
     lines.append(("connections", str(len(geometry.connections))))
@@ -85,7 +85,13 @@ def _metadata_text(
     elif geometry_error is not None:
         line("geometry", f"unavailable: {geometry_error}")
     if entry.part is not None:
-        line("file", _display_path(Path(entry.part.path), library_root))
+        line(
+            "file",
+            _display_path(
+                path=Path(entry.part.path),
+                library_root=library_root,
+            ),
+        )
     if (import_line := import_snippet(entry)) is not None:
         line("import", import_line)
     return text
@@ -132,24 +138,48 @@ class PartDetail(Vertical):
             metadata.update("No part selected")
             connections.show_empty()
         else:
-            metadata.update(_metadata_text(entry, self._library_root))
+            metadata.update(
+                _metadata_text(entry=entry, library_root=self._library_root)
+            )
             if self._parts is None:
                 connections.show_unavailable("Catalog not loaded.")
             else:
                 connections.show_loading(entry.code)
-                self._load_geometry(entry.code, self._parts)
+                self._load_geometry(code=entry.code, parts=self._parts)
         self.query_one("#subpart-tree", expect_type=SubPartTree).set_root_entry(entry)
 
-    @work(thread=True, exclusive=True, group="part-geometry")
+    @work(
+        thread=True,
+        exclusive=True,
+        group="part-geometry",
+        exit_on_error=False,
+    )
     def _load_geometry(self, code: str, parts: Parts) -> None:
         """Resolve one part off-thread and return only if it is still selected."""
+        worker = get_current_worker()
+        if worker.is_cancelled:
+            return
         try:
             geometry = parts.geometry(code)
-        except (PartError, OSError, UnicodeDecodeError) as error:
+        except Exception as error:  # noqa: BLE001 - geometry failures are nonfatal
+            if worker.is_cancelled:
+                return
             reason = str(error) or type(error).__name__
-            self.app.call_from_thread(self._geometry_failed, code, parts, reason)
+            self.app.call_from_thread(
+                self._geometry_failed,
+                code=code,
+                parts=parts,
+                reason=reason,
+            )
             return
-        self.app.call_from_thread(self._geometry_ready, code, parts, geometry)
+        if worker.is_cancelled:
+            return
+        self.app.call_from_thread(
+            self._geometry_ready,
+            code=code,
+            parts=parts,
+            geometry=geometry,
+        )
 
     def _geometry_ready(
         self,
@@ -161,7 +191,11 @@ class PartDetail(Vertical):
         if self._entry is None or self._entry.code != code or self._parts is not parts:
             return
         self.query_one("#part-metadata", expect_type=Static).update(
-            _metadata_text(self._entry, self._library_root, geometry)
+            _metadata_text(
+                entry=self._entry,
+                library_root=self._library_root,
+                geometry=geometry,
+            )
         )
         self.query_one("#part-connections", expect_type=PartConnections).show_geometry(
             geometry
@@ -173,8 +207,8 @@ class PartDetail(Vertical):
             return
         self.query_one("#part-metadata", expect_type=Static).update(
             _metadata_text(
-                self._entry,
-                self._library_root,
+                entry=self._entry,
+                library_root=self._library_root,
                 geometry_error=reason,
             )
         )

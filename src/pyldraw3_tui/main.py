@@ -28,15 +28,6 @@ class _ConnectionSourceError(ValueError):
         super().__init__(message)
 
 
-def _connection_source_error(
-    kind: str,
-    path: Path,
-    reason: str,
-) -> _ConnectionSourceError:
-    """Construct a consistently formatted source-validation error."""
-    return _ConnectionSourceError(kind, path, reason)
-
-
 def _package_version() -> str:
     try:
         return version("pyldraw3-tui")
@@ -97,10 +88,10 @@ def _validated_shadow_sources(sources: Iterable[Path]) -> tuple[Path, ...]:
     for source in sources:
         path = source.expanduser()
         if not path.exists():
-            raise _connection_source_error(  # noqa: TRY003
-                "LDCad shadow",
-                path,
-                "path does not exist",
+            raise _ConnectionSourceError(
+                kind="LDCad shadow",
+                path=path,
+                reason="path does not exist",
             )
         if path.is_dir():
             try:
@@ -108,24 +99,28 @@ def _validated_shadow_sources(sources: Iterable[Path]) -> tuple[Path, ...]:
                     pass
             except OSError as error:
                 reason = str(error) or type(error).__name__
-                raise _connection_source_error(  # noqa: TRY003
-                    "LDCad shadow", path, reason
+                raise _ConnectionSourceError(
+                    kind="LDCad shadow",
+                    path=path,
+                    reason=reason,
                 ) from error
             validated.append(path)
             continue
         if not path.is_file():
-            raise _connection_source_error(  # noqa: TRY003
-                "LDCad shadow",
-                path,
-                "expected a directory or ZIP/CSL archive",
+            raise _ConnectionSourceError(
+                kind="LDCad shadow",
+                path=path,
+                reason="expected a directory or ZIP/CSL archive",
             )
         try:
             with zipfile.ZipFile(path) as archive:
                 archive.infolist()
         except (OSError, zipfile.BadZipFile) as error:
             reason = str(error) or type(error).__name__
-            raise _connection_source_error(  # noqa: TRY003
-                "LDCad shadow", path, reason
+            raise _ConnectionSourceError(
+                kind="LDCad shadow",
+                path=path,
+                reason=reason,
             ) from error
         validated.append(path)
     return tuple(validated)
@@ -138,18 +133,20 @@ def _validated_studio_sources(sources: Iterable[Path]) -> tuple[Path, ...]:
         path = source.expanduser()
         try:
             document = json.loads(path.read_text(encoding="utf-8-sig"))
-        except (OSError, UnicodeError, ValueError) as error:
+        except (OSError, RecursionError, UnicodeError, ValueError) as error:
             reason = str(error) or type(error).__name__
-            raise _connection_source_error(  # noqa: TRY003
-                "Studio metadata", path, reason
+            raise _ConnectionSourceError(
+                kind="Studio metadata",
+                path=path,
+                reason=reason,
             ) from error
         if not isinstance(document, dict) or not isinstance(
             document.get("parts"), list
         ):
-            raise _connection_source_error(  # noqa: TRY003
-                "Studio metadata",
-                path,
-                "expected a JSON object containing a parts list",
+            raise _ConnectionSourceError(
+                kind="Studio metadata",
+                path=path,
+                reason="expected a JSON object containing a parts list",
             )
         validated.append(path)
     return tuple(validated)

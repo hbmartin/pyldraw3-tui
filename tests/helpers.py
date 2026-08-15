@@ -11,6 +11,8 @@ if TYPE_CHECKING:
 
 
 async def wait_for_catalog(app: PyldrawTuiApp, pilot: Pilot) -> None:
-    """Block until the catalog-load worker finishes and the UI settles."""
+    """Block until catalog loading and its initial geometry query settle."""
+    await app.workers.wait_for_complete()
+    await pilot.pause()
     await app.workers.wait_for_complete()
     await pilot.pause()

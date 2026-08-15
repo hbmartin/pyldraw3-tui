@@ -74,11 +74,10 @@ class ConnectionFeatureTable(DataTable[Text | str]):
                 occupancy,
                 ", ".join(feature.compatible_parts) or "—",
             )
-        self.border_title = f"Features ({len(features)})"
 
 
 class ConnectionDiagnosticsTable(DataTable[Text | str]):
-    """Warning diagnostics produced while reading connection metadata."""
+    """Geometry and connection-metadata warnings for one part."""
 
     BINDINGS: ClassVar = [
         Binding("j", "cursor_down", show=False),
@@ -92,7 +91,7 @@ class ConnectionDiagnosticsTable(DataTable[Text | str]):
         self.add_columns("Line", "Code", "Path", "Message")
 
     def set_diagnostics(self, diagnostics: Sequence[Diagnostic]) -> None:
-        """Replace rows with structured metadata diagnostics."""
+        """Replace rows with structured geometry and metadata diagnostics."""
         self.clear()
         for diagnostic in diagnostics:
             self.add_row(
@@ -101,7 +100,6 @@ class ConnectionDiagnosticsTable(DataTable[Text | str]):
                 Text("—" if diagnostic.path is None else str(diagnostic.path)),
                 Text(diagnostic.message),
             )
-        self.border_title = f"Metadata warnings ({len(diagnostics)})"
         self.display = bool(diagnostics)
 
 
@@ -145,11 +143,9 @@ class PartConnections(Vertical):
         yield ConnectionFeatureTable(id="connection-features")
         yield ConnectionDiagnosticsTable(id="connection-diagnostics")
 
-    def show_empty(self) -> None:
-        """Clear the panel when no catalog part is selected."""
-        self.query_one("#connection-summary", expect_type=Static).update(
-            "No part selected"
-        )
+    def _show_without_geometry(self, summary: Text | str) -> None:
+        """Replace the summary and clear geometry-dependent table rows."""
+        self.query_one("#connection-summary", expect_type=Static).update(summary)
         self.query_one(
             "#connection-features", expect_type=ConnectionFeatureTable
         ).set_features(())
@@ -157,17 +153,16 @@ class PartConnections(Vertical):
             "#connection-diagnostics", expect_type=ConnectionDiagnosticsTable
         ).set_diagnostics(())
 
+    def show_empty(self) -> None:
+        """Clear the panel when no catalog part is selected."""
+        self._show_without_geometry("No part selected")
+
     def show_loading(self, code: str) -> None:
         """Show a loading state while a part's geometry resolves."""
-        self.query_one("#connection-summary", expect_type=Static).update(
-            f"Loading connections for {code}…"
-        )
-        self.query_one(
-            "#connection-features", expect_type=ConnectionFeatureTable
-        ).set_features(())
-        self.query_one(
-            "#connection-diagnostics", expect_type=ConnectionDiagnosticsTable
-        ).set_diagnostics(())
+        summary = Text("Loading connections for ")
+        summary.append(code)
+        summary.append("…")
+        self._show_without_geometry(summary)
 
     def show_geometry(self, geometry: PartGeometry) -> None:
         """Render connection metadata from one resolved part geometry."""
@@ -183,16 +178,10 @@ class PartConnections(Vertical):
         ).set_features(geometry.connections)
         self.query_one(
             "#connection-diagnostics", expect_type=ConnectionDiagnosticsTable
-        ).set_diagnostics(report.diagnostics)
+        ).set_diagnostics(geometry.diagnostics)
 
     def show_unavailable(self, reason: str) -> None:
         """Render a nonfatal geometry/metadata loading failure."""
-        self.query_one("#connection-summary", expect_type=Static).update(
-            f"[yellow]Connections unavailable:[/] {reason}"
-        )
-        self.query_one(
-            "#connection-features", expect_type=ConnectionFeatureTable
-        ).set_features(())
-        self.query_one(
-            "#connection-diagnostics", expect_type=ConnectionDiagnosticsTable
-        ).set_diagnostics(())
+        summary = Text("Connections unavailable:", style="yellow")
+        summary.append(f" {reason}")
+        self._show_without_geometry(summary)

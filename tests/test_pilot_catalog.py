@@ -8,6 +8,7 @@ from dataclasses import dataclass, field, replace
 from typing import TYPE_CHECKING, Never
 
 import pytest
+from ldraw import Diagnostic, DiagnosticCode
 from ldraw.parts import MinifigSection, PartCategory
 from textual.widgets import Static
 
@@ -21,6 +22,7 @@ from pyldraw3_tui.widgets.colour_swatches import ColourSwatches
 from pyldraw3_tui.widgets.connections import (
     ConnectionDiagnosticsTable,
     ConnectionFeatureTable,
+    PartConnections,
 )
 from pyldraw3_tui.widgets.filter_box import FilterBox
 from pyldraw3_tui.widgets.issues_table import IssuesTable
@@ -331,6 +333,36 @@ async def test_part_connection_diagnostics_stay_out_of_model_issues(
         assert app.query_one("#issues-table", expect_type=IssuesTable).row_count == 0
 
 
+async def test_part_connections_show_geometry_diagnostics(
+    make_app: Callable[..., PyldrawTuiApp],
+) -> None:
+    app = make_app()
+    async with app.run_test(size=(120, 40)) as pilot:
+        await wait_for_catalog(app, pilot)
+        assert app.parts is not None
+        geometry = replace(
+            app.parts.geometry("3001"),
+            diagnostics=(
+                Diagnostic(
+                    message="unresolved fixture subpart",
+                    code=DiagnosticCode.PART_REFERENCE_UNRESOLVED,
+                ),
+            ),
+        )
+
+        app.query_one("#part-connections", expect_type=PartConnections).show_geometry(
+            geometry
+        )
+
+        diagnostics = app.query_one(
+            "#connection-diagnostics", expect_type=ConnectionDiagnosticsTable
+        )
+        assert diagnostics.row_count == 1
+        row = diagnostics.get_row_at(0)
+        assert row[1] == "part.reference_unresolved"
+        assert str(row[3]) == "unresolved fixture subpart"
+
+
 async def test_part_geometry_failure_is_nonfatal(
     make_app: Callable[..., PyldrawTuiApp],
     monkeypatch: pytest.MonkeyPatch,
@@ -341,8 +373,8 @@ async def test_part_geometry_failure_is_nonfatal(
         assert app.parts is not None
 
         def fail_geometry(_code: str) -> Never:
-            message = "fixture became unreadable"
-            raise OSError(message)
+            message = "fixture [/] became unreadable"
+            raise RuntimeError(message)
 
         monkeypatch.setattr(app.parts, "geometry", fail_geometry)
         app.focus_part_in_catalog("3022")
@@ -352,10 +384,10 @@ async def test_part_geometry_failure_is_nonfatal(
 
         metadata = app.query_one("#part-metadata", expect_type=Static)
         summary = app.query_one("#connection-summary", expect_type=Static)
-        assert "geometry  unavailable: fixture became unreadable" in str(
+        assert "geometry  unavailable: fixture [/] became unreadable" in str(
             metadata.render()
         )
-        assert "Connections unavailable: fixture became unreadable" in str(
+        assert "Connections unavailable: fixture [/] became unreadable" in str(
             summary.render()
         )
 

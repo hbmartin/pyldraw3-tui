@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import zipfile
 from types import SimpleNamespace
-from typing import TYPE_CHECKING, cast
+from typing import TYPE_CHECKING, Never, cast
 
 import pytest
 
@@ -146,6 +146,30 @@ def test_unreadable_shadow_directory_exits_before_app(
 
     assert excinfo.value.code == 1
     assert "permission denied" in capsys.readouterr().err
+    assert "ran" not in captured
+
+
+def test_recursive_studio_document_exits_before_app(
+    fixture_config: Config,
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    captured = _stub_main(monkeypatch, fixture_config)
+    studio = tmp_path / "recursive.json"
+    studio.write_text('{"parts": []}')
+
+    def reject_recursive_document(_contents: str) -> Never:
+        message = "maximum recursion depth exceeded"
+        raise RecursionError(message)
+
+    monkeypatch.setattr(main_module.json, "loads", reject_recursive_document)
+
+    with pytest.raises(SystemExit) as excinfo:
+        main(["--studio-metadata", str(studio)])
+
+    assert excinfo.value.code == 1
+    assert "maximum recursion depth exceeded" in capsys.readouterr().err
     assert "ran" not in captured
 
 
