@@ -103,6 +103,14 @@ def _validated_shadow_sources(sources: Iterable[Path]) -> tuple[Path, ...]:
                 "path does not exist",
             )
         if path.is_dir():
+            try:
+                for _entry in path.iterdir():
+                    pass
+            except OSError as error:
+                reason = str(error) or type(error).__name__
+                raise _connection_source_error(  # noqa: TRY003
+                    "LDCad shadow", path, reason
+                ) from error
             validated.append(path)
             continue
         if not path.is_file():

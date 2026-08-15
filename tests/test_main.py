@@ -12,7 +12,10 @@ import pyldraw3_tui.main as main_module
 from pyldraw3_tui.main import main
 
 if TYPE_CHECKING:
+    from collections.abc import Iterator
     from pathlib import Path
+
+    from ldraw.config import Config
 
     from pyldraw3_tui.data.source import CatalogSource
 
@@ -28,7 +31,10 @@ def test_malformed_config_exits_with_message(tmp_path: Path, capsys):
     assert "mapping" in stderr
 
 
-def _stub_main(monkeypatch, fixture_config) -> dict[str, object]:
+def _stub_main(
+    monkeypatch: pytest.MonkeyPatch,
+    fixture_config: Config,
+) -> dict[str, object]:
     captured: dict[str, object] = {}
     monkeypatch.setattr(
         main_module.Config,
@@ -36,7 +42,7 @@ def _stub_main(monkeypatch, fixture_config) -> dict[str, object]:
         staticmethod(lambda _path=None: fixture_config),
     )
 
-    def app_factory(**kwargs) -> SimpleNamespace:
+    def app_factory(**kwargs: object) -> SimpleNamespace:
         captured.update(kwargs)
         return SimpleNamespace(run=lambda: captured.setdefault("ran", True))
 
@@ -45,10 +51,10 @@ def _stub_main(monkeypatch, fixture_config) -> dict[str, object]:
 
 
 def test_connection_source_flags_preserve_order(
-    fixture_config,
-    monkeypatch,
+    fixture_config: Config,
+    monkeypatch: pytest.MonkeyPatch,
     tmp_path: Path,
-):
+) -> None:
     captured = _stub_main(monkeypatch, fixture_config)
     shadow_a = tmp_path / "shadow-a"
     shadow_b = tmp_path / "shadow-b.csl"
@@ -95,12 +101,12 @@ def test_connection_source_flags_preserve_order(
     ],
 )
 def test_invalid_connection_source_exits_before_app(
-    fixture_config,
-    monkeypatch,
+    fixture_config: Config,
+    monkeypatch: pytest.MonkeyPatch,
     tmp_path: Path,
-    capsys,
-    case,
-):
+    capsys: pytest.CaptureFixture[str],
+    case: tuple[str, str, str | None, str],
+) -> None:
     option, filename, contents, message = case
     captured = _stub_main(monkeypatch, fixture_config)
     source = tmp_path / filename
@@ -115,11 +121,39 @@ def test_invalid_connection_source_exits_before_app(
     assert "ran" not in captured
 
 
-def test_unsupported_studio_row_is_not_a_startup_error(
-    fixture_config,
-    monkeypatch,
+def test_unreadable_shadow_directory_exits_before_app(
+    fixture_config: Config,
+    monkeypatch: pytest.MonkeyPatch,
     tmp_path: Path,
-):
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    captured = _stub_main(monkeypatch, fixture_config)
+    shadow = tmp_path / "shadow"
+    shadow.mkdir()
+    path_type = type(shadow)
+    original_iterdir = path_type.iterdir
+
+    def deny_listing(path: Path) -> Iterator[Path]:
+        if path == shadow:
+            message = "permission denied"
+            raise PermissionError(message)
+        return original_iterdir(path)
+
+    monkeypatch.setattr(path_type, "iterdir", deny_listing)
+
+    with pytest.raises(SystemExit) as excinfo:
+        main(["--ldcad-shadow", str(shadow)])
+
+    assert excinfo.value.code == 1
+    assert "permission denied" in capsys.readouterr().err
+    assert "ran" not in captured
+
+
+def test_unsupported_studio_row_is_not_a_startup_error(
+    fixture_config: Config,
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
     captured = _stub_main(monkeypatch, fixture_config)
     studio = tmp_path / "studio.json"
     studio.write_text(

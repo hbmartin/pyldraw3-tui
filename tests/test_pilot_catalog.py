@@ -30,9 +30,12 @@ from pyldraw3_tui.widgets.subpart_tree import SubPartTree
 from tests.helpers import wait_for_catalog
 
 if TYPE_CHECKING:
+    from collections.abc import Callable
     from pathlib import Path
 
     from ldraw import PartGeometry
+
+    from pyldraw3_tui.app import PyldrawTuiApp
 
 
 @dataclass(slots=True)
@@ -226,7 +229,9 @@ def test_part_metadata_includes_geometry(parts):
     assert "conn. coverage  partial" in text
 
 
-async def test_part_connections_show_primitive_features(make_app):
+async def test_part_connections_show_primitive_features(
+    make_app: Callable[..., PyldrawTuiApp],
+) -> None:
     app = make_app()
     async with app.run_test(size=(120, 40)) as pilot:
         await wait_for_catalog(app, pilot)
@@ -249,7 +254,9 @@ async def test_part_connections_show_primitive_features(make_app):
         assert row[7] == "free"
 
 
-async def test_part_connections_show_none_coverage(make_app):
+async def test_part_connections_show_none_coverage(
+    make_app: Callable[..., PyldrawTuiApp],
+) -> None:
     app = make_app()
     async with app.run_test(size=(120, 40)) as pilot:
         await wait_for_catalog(app, pilot)
@@ -266,7 +273,9 @@ async def test_part_connections_show_none_coverage(make_app):
         assert table.row_count == 0
 
 
-async def test_part_connection_table_shows_occupancy_and_compatibility(make_app):
+async def test_part_connection_table_shows_occupancy_and_compatibility(
+    make_app: Callable[..., PyldrawTuiApp],
+) -> None:
     app = make_app()
     async with app.run_test(size=(120, 40)) as pilot:
         await wait_for_catalog(app, pilot)
@@ -289,9 +298,9 @@ async def test_part_connection_table_shows_occupancy_and_compatibility(make_app)
 
 
 async def test_part_connection_diagnostics_stay_out_of_model_issues(
-    make_app,
-    tmp_path,
-):
+    make_app: Callable[..., PyldrawTuiApp],
+    tmp_path: Path,
+) -> None:
     studio = tmp_path / "studio.json"
     studio.write_text(
         """{
@@ -322,13 +331,16 @@ async def test_part_connection_diagnostics_stay_out_of_model_issues(
         assert app.query_one("#issues-table", expect_type=IssuesTable).row_count == 0
 
 
-async def test_part_geometry_failure_is_nonfatal(make_app, monkeypatch):
+async def test_part_geometry_failure_is_nonfatal(
+    make_app: Callable[..., PyldrawTuiApp],
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
     app = make_app()
     async with app.run_test(size=(120, 40)) as pilot:
         await wait_for_catalog(app, pilot)
         assert app.parts is not None
 
-        def fail_geometry(_code) -> Never:
+        def fail_geometry(_code: str) -> Never:
             message = "fixture became unreadable"
             raise OSError(message)
 
@@ -348,7 +360,10 @@ async def test_part_geometry_failure_is_nonfatal(make_app, monkeypatch):
         )
 
 
-async def test_stale_part_geometry_result_is_discarded(make_app, monkeypatch):
+async def test_stale_part_geometry_result_is_discarded(
+    make_app: Callable[..., PyldrawTuiApp],
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
     app = make_app()
     async with app.run_test(size=(120, 40)) as pilot:
         await wait_for_catalog(app, pilot)
@@ -357,7 +372,7 @@ async def test_stale_part_geometry_result_is_discarded(make_app, monkeypatch):
         started = threading.Event()
         release = threading.Event()
 
-        def blocking_geometry(code) -> PartGeometry:
+        def blocking_geometry(code: str) -> PartGeometry:
             if code == "3022":
                 started.set()
                 if not release.wait(timeout=5):

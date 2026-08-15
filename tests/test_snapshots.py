@@ -64,7 +64,9 @@ async def test_snapshot_part_detail_subparts(make_app):
         _check(app, "part_detail_subparts")
 
 
-async def test_snapshot_part_detail_connections(make_app):
+async def test_snapshot_part_detail_connections(
+    make_app: Callable[..., PyldrawTuiApp],
+) -> None:
     app = make_app()
     async with app.run_test(size=SIZE) as pilot:
         await wait_for_catalog(app, pilot)
