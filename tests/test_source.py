@@ -65,6 +65,32 @@ def test_load_reuses_fresh_index(source: CatalogSource):
     assert sorted(second.catalog.by_code) == sorted(first.catalog.by_code)
 
 
+def test_default_config_factory_preserves_connection_sources(
+    fixture_config: Config,
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    config_file = tmp_path / "config.yml"
+    shadow = tmp_path / "shadow"
+    studio = tmp_path / "studio.json"
+    monkeypatch.setattr(
+        Config,
+        "load",
+        staticmethod(lambda _config_file=None: fixture_config),
+    )
+
+    source = CatalogSource.from_default_config(
+        config_file=config_file,
+        connection_shadows=(shadow,),
+        studio_metadata=(studio,),
+    )
+
+    assert source.config is fixture_config
+    assert source.config_file == config_file
+    assert source.connection_shadows == (shadow,)
+    assert source.studio_metadata == (studio,)
+
+
 def test_load_registers_connection_metadata_sources(
     fixture_config: Config,
     tmp_path: Path,

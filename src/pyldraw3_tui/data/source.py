@@ -44,9 +44,20 @@ class CatalogSource:
     studio_metadata: tuple[Path, ...] = field(default=(), kw_only=True)
 
     @classmethod
-    def from_default_config(cls, config_file: Path | None = None) -> Self:
+    def from_default_config(
+        cls,
+        config_file: Path | None = None,
+        *,
+        connection_shadows: tuple[Path, ...] = (),
+        studio_metadata: tuple[Path, ...] = (),
+    ) -> Self:
         """Build a source from the user's pyldraw3 configuration."""
-        return cls(config=Config.load(config_file), config_file=config_file)
+        return cls(
+            config=Config.load(config_file),
+            config_file=config_file,
+            connection_shadows=connection_shadows,
+            studio_metadata=studio_metadata,
+        )
 
     @property
     def session(self) -> LDrawSession:
