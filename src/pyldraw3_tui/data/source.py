@@ -40,6 +40,8 @@ class CatalogSource:
 
     config: Config
     config_file: Path | None = field(default=None, kw_only=True)
+    connection_shadows: tuple[Path, ...] = field(default=(), kw_only=True)
+    studio_metadata: tuple[Path, ...] = field(default=(), kw_only=True)
 
     @classmethod
     def from_default_config(cls, config_file: Path | None = None) -> Self:
@@ -86,7 +88,13 @@ class CatalogSource:
         Blocking (file I/O over the whole library on a cold index) — run
         it in a worker thread.
         """
-        return self.session.load()
+        result = self.session.prepare_catalog(
+            connection_shadows=self.connection_shadows,
+            studio_metadata=self.studio_metadata,
+        )
+        if result.parts is None:
+            raise FileNotFoundError(self.parts_lst_path)
+        return result.parts
 
     def open_model(self, path: Path | str) -> Model:
         """Read a ``.ldr``/``.mpd`` file, wrapping failures for the UI."""

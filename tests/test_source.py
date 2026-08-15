@@ -65,6 +65,46 @@ def test_load_reuses_fresh_index(source: CatalogSource):
     assert sorted(second.catalog.by_code) == sorted(first.catalog.by_code)
 
 
+def test_load_registers_connection_metadata_sources(
+    fixture_config: Config,
+    tmp_path: Path,
+):
+    shadow = tmp_path / "shadow"
+    shadow_part = shadow / "parts" / "3901.dat"
+    shadow_part.parent.mkdir(parents=True)
+    shadow_part.write_text("0 !LDCAD SNAP_CLEAR\n")
+    studio = tmp_path / "studio.json"
+    studio.write_text(
+        """{
+          "parts": [{
+            "part_id": "3901",
+            "connections": [{
+              "id": "studio-bar",
+              "type": "bar",
+              "position": [0, 0, 0],
+              "axis": [0, 1, 0],
+              "gender": "male",
+              "radius": 3.2,
+              "length": 10
+            }]
+          }]
+        }"""
+    )
+
+    parts = CatalogSource(
+        config=fixture_config,
+        connection_shadows=(shadow,),
+        studio_metadata=(studio,),
+    ).load()
+    report = parts.connection_metadata("3901")
+
+    assert report.coverage.value == "complete"
+    assert report.source_count == 2
+    assert [
+        (feature.feature_id, feature.source.value) for feature in report.features
+    ] == [("studio-bar", "studio")]
+
+
 def test_open_model(source: CatalogSource, car_ldr: Path):
     model = source.open_model(car_ldr)
     assert [piece.part for piece in model.iter_pieces()] == ["3001", "3022", "6157"]

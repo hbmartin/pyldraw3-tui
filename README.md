@@ -111,12 +111,16 @@ uv tool install git+https://github.com/hbmartin/pyldraw3-tui
 ## Usage
 
 ```sh
-pyldraw3-tui [FILE]
+pyldraw3-tui [--ldcad-shadow PATH ...] [--studio-metadata PATH ...] [FILE]
 ```
 
 With no argument it opens on the **Catalog**; given a `.ldr`/`.mpd` path it opens on the **Model**
 view for that file. Switch modes in-app via the three top tabs: **Catalog**, **Model**, and
 **Rebrickable**.
+
+Repeat `--ldcad-shadow` to register LDCad shadow directories or ZIP/CSL archives and
+`--studio-metadata` to register Studio connectivity JSON exports. Sources retain command-line
+order within each format. Invalid or unreadable source files are reported before the TUI opens.
 
 ## Features
 
@@ -126,7 +130,8 @@ The app is organised around its three top tabs.
 
 - **Look up part codes** — find a part's code/description fast to paste into scripts or `.ldr` files.
 - **Explore the catalog** — browse categories and minifig sections to discover parts.
-- **Inspect a part** — metadata, palette swatches, and a drillable sub-part reference tree.
+- **Inspect a part** — metadata, palette swatches, a drillable sub-part reference tree, and typed
+  physical connections with source coverage and diagnostics.
 
 **Model** — read a model file:
 
@@ -160,6 +165,19 @@ The app is organised around its three top tabs.
 
 The instruction browser is renderer-neutral and read-only. It does not generate images, PDF/HTML
 instructions, manifests, or snapshot artifacts, and it does not edit instruction metadata.
+
+### Connection metadata
+
+The Catalog's **Connections** tab lists studs and receptacles, bars and clips, pins and holes,
+axles and axle holes, hinges, and rim/tyre interfaces detected by pyldraw3. Each row retains its
+role, local position and axis, evidence source, confidence, stable feature ID, occupancy, and
+compatible-part hints.
+
+Coverage is **complete** when clean authoritative metadata was processed, **partial** when the
+result depends on primitive or heuristic evidence, and **none** when no connection evidence was
+found. LDCad/Studio parsing warnings stay in this tab; they do not make the part or an open model
+structurally invalid. Without optional source flags, connector primitives, conservative heuristics,
+official shortcuts, and inline `!LDCAD` records are still inspected automatically.
 
 ## First run
 
