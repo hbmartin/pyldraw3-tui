@@ -2,16 +2,39 @@
 
 from __future__ import annotations
 
+import json
 import sys
+import zipfile
 from argparse import ArgumentParser
 from importlib.metadata import PackageNotFoundError, version
 from pathlib import Path
+from typing import TYPE_CHECKING
 
 from ldraw.config import Config
 from ldraw.errors import ConfigLoadError
 
 from pyldraw3_tui.app import PyldrawTuiApp
 from pyldraw3_tui.data.source import CatalogSource
+
+if TYPE_CHECKING:
+    from collections.abc import Iterable
+
+
+class _ConnectionSourceError(ValueError):
+    """Invalid startup connection metadata source."""
+
+    def __init__(self, kind: str, path: Path, reason: str) -> None:
+        message = f"{kind} {path}: {reason}"
+        super().__init__(message)
+
+
+def _connection_source_error(
+    kind: str,
+    path: Path,
+    reason: str,
+) -> _ConnectionSourceError:
+    """Construct a consistently formatted source-validation error."""
+    return _ConnectionSourceError(kind, path, reason)
 
 
 def _package_version() -> str:
@@ -45,6 +68,22 @@ def build_parser() -> ArgumentParser:
         help="alternate pyldraw3 config.yml",
     )
     parser.add_argument(
+        "--ldcad-shadow",
+        action="append",
+        default=[],
+        type=Path,
+        metavar="PATH",
+        help="LDCad shadow directory or ZIP/CSL archive (repeatable)",
+    )
+    parser.add_argument(
+        "--studio-metadata",
+        action="append",
+        default=[],
+        type=Path,
+        metavar="PATH",
+        help="Studio connectivity JSON export (repeatable)",
+    )
+    parser.add_argument(
         "--version",
         action="version",
         version=f"%(prog)s {_package_version()}",
@@ -52,16 +91,79 @@ def build_parser() -> ArgumentParser:
     return parser
 
 
+def _validated_shadow_sources(sources: Iterable[Path]) -> tuple[Path, ...]:
+    """Return normalized, readable LDCad shadow sources in registration order."""
+    validated: list[Path] = []
+    for source in sources:
+        path = source.expanduser()
+        if not path.exists():
+            raise _connection_source_error(  # noqa: TRY003
+                "LDCad shadow",
+                path,
+                "path does not exist",
+            )
+        if path.is_dir():
+            validated.append(path)
+            continue
+        if not path.is_file():
+            raise _connection_source_error(  # noqa: TRY003
+                "LDCad shadow",
+                path,
+                "expected a directory or ZIP/CSL archive",
+            )
+        try:
+            with zipfile.ZipFile(path) as archive:
+                archive.infolist()
+        except (OSError, zipfile.BadZipFile) as error:
+            reason = str(error) or type(error).__name__
+            raise _connection_source_error(  # noqa: TRY003
+                "LDCad shadow", path, reason
+            ) from error
+        validated.append(path)
+    return tuple(validated)
+
+
+def _validated_studio_sources(sources: Iterable[Path]) -> tuple[Path, ...]:
+    """Return normalized Studio JSON sources with a valid document envelope."""
+    validated: list[Path] = []
+    for source in sources:
+        path = source.expanduser()
+        try:
+            document = json.loads(path.read_text(encoding="utf-8-sig"))
+        except (OSError, UnicodeError, ValueError) as error:
+            reason = str(error) or type(error).__name__
+            raise _connection_source_error(  # noqa: TRY003
+                "Studio metadata", path, reason
+            ) from error
+        if not isinstance(document, dict) or not isinstance(
+            document.get("parts"), list
+        ):
+            raise _connection_source_error(  # noqa: TRY003
+                "Studio metadata",
+                path,
+                "expected a JSON object containing a parts list",
+            )
+        validated.append(path)
+    return tuple(validated)
+
+
 def main(argv: list[str] | None = None) -> None:
     """Run the pyldraw3-tui application."""
     args = build_parser().parse_args(argv)
     try:
         config = Config.load(args.config) if args.config is not None else Config.load()
-    except ConfigLoadError as error:
+        connection_shadows = _validated_shadow_sources(args.ldcad_shadow)
+        studio_metadata = _validated_studio_sources(args.studio_metadata)
+    except (ConfigLoadError, _ConnectionSourceError) as error:
         print(f"error: {error}", file=sys.stderr)
         raise SystemExit(1) from error
     app = PyldrawTuiApp(
-        source=CatalogSource(config=config, config_file=args.config),
+        source=CatalogSource(
+            config=config,
+            config_file=args.config,
+            connection_shadows=connection_shadows,
+            studio_metadata=studio_metadata,
+        ),
         model_path=args.file,
     )
     app.run()

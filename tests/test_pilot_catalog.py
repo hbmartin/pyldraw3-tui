@@ -4,11 +4,12 @@ from __future__ import annotations
 
 import asyncio
 import threading
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 from typing import TYPE_CHECKING, Never
 
 import pytest
 from ldraw.parts import MinifigSection, PartCategory
+from textual.widgets import Static
 
 import pyldraw3_tui.app as app_module
 from pyldraw3_tui.data.source import CatalogSource, SourceState
@@ -17,7 +18,12 @@ from pyldraw3_tui.screens.catalog import CatalogView
 from pyldraw3_tui.screens.chooser import ChooserScreen
 from pyldraw3_tui.screens.help import HelpScreen
 from pyldraw3_tui.widgets.colour_swatches import ColourSwatches
+from pyldraw3_tui.widgets.connections import (
+    ConnectionDiagnosticsTable,
+    ConnectionFeatureTable,
+)
 from pyldraw3_tui.widgets.filter_box import FilterBox
+from pyldraw3_tui.widgets.issues_table import IssuesTable
 from pyldraw3_tui.widgets.part_detail import _metadata_text
 from pyldraw3_tui.widgets.parts_list import PartsList
 from pyldraw3_tui.widgets.subpart_tree import SubPartTree
@@ -25,6 +31,8 @@ from tests.helpers import wait_for_catalog
 
 if TYPE_CHECKING:
     from pathlib import Path
+
+    from ldraw import PartGeometry
 
 
 @dataclass(slots=True)
@@ -211,9 +219,164 @@ def test_part_metadata_uses_library_relative_path(parts):
 
 def test_part_metadata_includes_geometry(parts):
     entry = parts.catalog.by_code["3001"]
-    text = _metadata_text(entry, parts.path.parent, parts).plain
+    text = _metadata_text(entry, parts.path.parent, parts.geometry(entry.code)).plain
     assert "80 x 28 x 40 LDU (32.0 x 11.2 x 16.0 mm)" in text
     assert "4 top" in text
+    assert "connections  4" in text
+    assert "conn. coverage  partial" in text
+
+
+async def test_part_connections_show_primitive_features(make_app):
+    app = make_app()
+    async with app.run_test(size=(120, 40)) as pilot:
+        await wait_for_catalog(app, pilot)
+
+        metadata = app.query_one("#part-metadata", expect_type=Static)
+        assert "connections  4" in str(metadata.render())
+        assert "conn. coverage  partial" in str(metadata.render())
+
+        summary = app.query_one("#connection-summary", expect_type=Static)
+        assert "coverage  partial" in str(summary.render())
+        table = app.query_one(
+            "#connection-features", expect_type=ConnectionFeatureTable
+        )
+        assert table.row_count == 4
+        row = table.get_row_at(0)
+        assert row[0] == "stud"
+        assert row[1] == "male"
+        assert row[4] == "primitive"
+        assert row[5] == "100%"
+        assert row[7] == "free"
+
+
+async def test_part_connections_show_none_coverage(make_app):
+    app = make_app()
+    async with app.run_test(size=(120, 40)) as pilot:
+        await wait_for_catalog(app, pilot)
+        app.focus_part_in_catalog("3901")
+        await pilot.pause()
+        await app.workers.wait_for_complete()
+        await pilot.pause()
+
+        summary = app.query_one("#connection-summary", expect_type=Static)
+        assert "coverage  none" in str(summary.render())
+        table = app.query_one(
+            "#connection-features", expect_type=ConnectionFeatureTable
+        )
+        assert table.row_count == 0
+
+
+async def test_part_connection_table_shows_occupancy_and_compatibility(make_app):
+    app = make_app()
+    async with app.run_test(size=(120, 40)) as pilot:
+        await wait_for_catalog(app, pilot)
+        assert app.parts is not None
+        feature = replace(
+            app.parts.connections("3001")[0],
+            occupied=True,
+            occupied_by="shortcut-assembly",
+            compatible_parts=("3002", "3003"),
+        )
+        table = app.query_one(
+            "#connection-features", expect_type=ConnectionFeatureTable
+        )
+
+        table.set_features((feature,))
+
+        row = table.get_row_at(0)
+        assert row[7] == "occupied by shortcut-assembly"
+        assert row[8] == "3002, 3003"
+
+
+async def test_part_connection_diagnostics_stay_out_of_model_issues(
+    make_app,
+    tmp_path,
+):
+    studio = tmp_path / "studio.json"
+    studio.write_text(
+        """{
+          "parts": [{
+            "part_id": "3001",
+            "connections": [{
+              "id": "studio-stud",
+              "type": "stud",
+              "position": [0, 0, 0],
+              "axis": [0, 1, 0],
+              "gender": "male",
+              "radius": 6,
+              "length": 4,
+              "future_field": true
+            }]
+          }]
+        }"""
+    )
+    app = make_app(studio_metadata=(studio,))
+    async with app.run_test(size=(120, 40)) as pilot:
+        await wait_for_catalog(app, pilot)
+
+        diagnostics = app.query_one(
+            "#connection-diagnostics", expect_type=ConnectionDiagnosticsTable
+        )
+        assert diagnostics.row_count == 1
+        assert diagnostics.get_row_at(0)[1] == "connection.unsupported_option"
+        assert app.query_one("#issues-table", expect_type=IssuesTable).row_count == 0
+
+
+async def test_part_geometry_failure_is_nonfatal(make_app, monkeypatch):
+    app = make_app()
+    async with app.run_test(size=(120, 40)) as pilot:
+        await wait_for_catalog(app, pilot)
+        assert app.parts is not None
+
+        def fail_geometry(_code) -> Never:
+            message = "fixture became unreadable"
+            raise OSError(message)
+
+        monkeypatch.setattr(app.parts, "geometry", fail_geometry)
+        app.focus_part_in_catalog("3022")
+        await pilot.pause()
+        await app.workers.wait_for_complete()
+        await pilot.pause()
+
+        metadata = app.query_one("#part-metadata", expect_type=Static)
+        summary = app.query_one("#connection-summary", expect_type=Static)
+        assert "geometry  unavailable: fixture became unreadable" in str(
+            metadata.render()
+        )
+        assert "Connections unavailable: fixture became unreadable" in str(
+            summary.render()
+        )
+
+
+async def test_stale_part_geometry_result_is_discarded(make_app, monkeypatch):
+    app = make_app()
+    async with app.run_test(size=(120, 40)) as pilot:
+        await wait_for_catalog(app, pilot)
+        assert app.parts is not None
+        original_geometry = app.parts.geometry
+        started = threading.Event()
+        release = threading.Event()
+
+        def blocking_geometry(code) -> PartGeometry:
+            if code == "3022":
+                started.set()
+                if not release.wait(timeout=5):
+                    raise TimeoutError
+            return original_geometry(code)
+
+        monkeypatch.setattr(app.parts, "geometry", blocking_geometry)
+        app.focus_part_in_catalog("3022")
+        await wait_until(started.is_set, pilot, "part geometry did not start")
+        app.focus_part_in_catalog("3901")
+        await pilot.pause()
+        release.set()
+        await app.workers.wait_for_complete()
+        await pilot.pause()
+
+        metadata = app.query_one("#part-metadata", expect_type=Static)
+        summary = app.query_one("#connection-summary", expect_type=Static)
+        assert "code  3901" in str(metadata.render())
+        assert "coverage  none" in str(summary.render())
 
 
 async def test_palette_marks_solid_colours(make_app):

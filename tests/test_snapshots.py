@@ -64,6 +64,17 @@ async def test_snapshot_part_detail_subparts(make_app):
         _check(app, "part_detail_subparts")
 
 
+async def test_snapshot_part_detail_connections(make_app):
+    app = make_app()
+    async with app.run_test(size=SIZE) as pilot:
+        await wait_for_catalog(app, pilot)
+        app.query_one(
+            "#detail-tabs", expect_type=TabbedContent
+        ).active = "tab-connections"
+        await pilot.pause()
+        _check(app, "part_detail_connections")
+
+
 async def test_snapshot_model_pieces(make_app, spaceship_mpd):
     app = make_app(model_path=spaceship_mpd)
     async with app.run_test(size=SIZE) as pilot:

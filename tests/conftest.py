@@ -56,9 +56,15 @@ def make_app(
         model_path: Path | None = None,
         *,
         rebrickable_data: FakeRebrickableData | None = fake_rebrickable,
+        connection_shadows: tuple[Path, ...] = (),
+        studio_metadata: tuple[Path, ...] = (),
     ) -> PyldrawTuiApp:
         app = PyldrawTuiApp(
-            source=CatalogSource(config=fixture_config),
+            source=CatalogSource(
+                config=fixture_config,
+                connection_shadows=connection_shadows,
+                studio_metadata=studio_metadata,
+            ),
             model_path=model_path,
             rebrickable_data=rebrickable_data,
         )
