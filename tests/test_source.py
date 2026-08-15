@@ -2,10 +2,13 @@
 
 from __future__ import annotations
 
+from types import SimpleNamespace
 from typing import TYPE_CHECKING
 
 import pytest
+from ldraw import Diagnostic, DiagnosticCode, Severity
 from ldraw.config import Config
+from ldraw.session import LDrawSession
 
 from pyldraw3_tui.data.source import CatalogSource, SourceState
 from pyldraw3_tui.errors import ModelLoadError
@@ -63,6 +66,27 @@ def test_load_reuses_fresh_index(source: CatalogSource):
     second = source.load()
     assert source.catalog_db.stat().st_mtime_ns == mtime
     assert sorted(second.catalog.by_code) == sorted(first.catalog.by_code)
+
+
+def test_load_retains_catalog_preparation_diagnostics(
+    source: CatalogSource,
+    parts,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    warning = Diagnostic(
+        message="catalog index could not be persisted",
+        severity=Severity.WARNING,
+        code=DiagnosticCode.CATALOG_PERSIST_FAILED,
+    )
+    result = SimpleNamespace(parts=parts, diagnostics=(warning,))
+    monkeypatch.setattr(
+        LDrawSession,
+        "prepare_catalog",
+        lambda _session, **_kwargs: result,
+    )
+
+    assert source.load() is parts
+    assert source.last_diagnostics == (warning,)
 
 
 def test_default_config_factory_preserves_connection_sources(

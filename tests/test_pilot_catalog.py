@@ -8,8 +8,9 @@ from dataclasses import dataclass, field, replace
 from typing import TYPE_CHECKING, Never
 
 import pytest
-from ldraw import Diagnostic, DiagnosticCode
+from ldraw import Diagnostic, DiagnosticCode, Severity
 from ldraw.parts import MinifigSection, PartCategory
+from ldraw.session import LDrawSession
 from textual.widgets import Static
 
 import pyldraw3_tui.app as app_module
@@ -36,6 +37,7 @@ if TYPE_CHECKING:
     from pathlib import Path
 
     from ldraw import PartGeometry
+    from ldraw.session import CatalogPreparationResult
 
     from pyldraw3_tui.app import PyldrawTuiApp
 
@@ -71,7 +73,7 @@ class BlockingCatalogSource(CatalogSource):
         self.started.set()
         if self.load_calls == 1 and not self.release.wait(timeout=5):
             raise TimeoutError
-        return CatalogSource(config=self.config).load()
+        return CatalogSource.load(self)
 
 
 def capture_notifications(app, monkeypatch):
@@ -93,6 +95,32 @@ async def wait_until(predicate, pilot, message):
             return
         await pilot.pause(0.01)
     raise AssertionError(message)
+
+
+def test_blocking_catalog_source_preserves_connection_sources(
+    fixture_config,
+    tmp_path: Path,
+) -> None:
+    studio = tmp_path / "studio.json"
+    studio.write_text(
+        '{"parts": [{"part_id": "3901", "connections": '
+        '[{"id": "test-bar", "type": "bar", "position": [0, 0, 0], '
+        '"axis": [0, 1, 0], "gender": "male"}]}]}'
+    )
+    release = threading.Event()
+    release.set()
+    source = BlockingCatalogSource(
+        config=fixture_config,
+        marker_db=tmp_path / "catalog.db",
+        release=release,
+        studio_metadata=(studio,),
+    )
+
+    parts = source.load()
+
+    assert [
+        feature.feature_id for feature in parts.connection_metadata("3901").features
+    ] == ["test-bar"]
 
 
 async def test_catalog_loads_and_selects_first_part(make_app):
@@ -119,6 +147,37 @@ async def test_catalog_load_failure_clears_loading(fixture_config):
         await wait_for_catalog(app, pilot)
         view = app.query_one("#catalog-view", expect_type=CatalogView)
         assert not view.loading
+
+
+async def test_catalog_preparation_diagnostics_are_notified(
+    make_app: Callable[..., PyldrawTuiApp],
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    original_prepare = LDrawSession.prepare_catalog
+    warning = Diagnostic(
+        message="catalog index could not be persisted",
+        severity=Severity.WARNING,
+        code=DiagnosticCode.CATALOG_PERSIST_FAILED,
+    )
+
+    def prepare_with_warning(
+        session: LDrawSession,
+        **kwargs,
+    ) -> CatalogPreparationResult:
+        result = original_prepare(session, **kwargs)
+        return replace(result, diagnostics=(*result.diagnostics, warning))
+
+    monkeypatch.setattr(LDrawSession, "prepare_catalog", prepare_with_warning)
+    app = make_app()
+    notifications = capture_notifications(app, monkeypatch)
+
+    async with app.run_test(size=(120, 40)) as pilot:
+        await wait_for_catalog(app, pilot)
+
+        assert any(
+            message == warning.message and kwargs.get("severity") == "warning"
+            for message, kwargs in notifications
+        )
 
 
 async def test_catalog_load_in_progress_notifies(fixture_config, tmp_path, monkeypatch):
@@ -228,7 +287,7 @@ def test_part_metadata_includes_geometry(parts):
     assert "80 x 28 x 40 LDU (32.0 x 11.2 x 16.0 mm)" in text
     assert "4 top" in text
     assert "connections  4" in text
-    assert "conn. coverage  partial" in text
+    assert "coverage  partial" in text
 
 
 async def test_part_connections_show_primitive_features(
@@ -240,7 +299,7 @@ async def test_part_connections_show_primitive_features(
 
         metadata = app.query_one("#part-metadata", expect_type=Static)
         assert "connections  4" in str(metadata.render())
-        assert "conn. coverage  partial" in str(metadata.render())
+        assert "coverage  partial" in str(metadata.render())
 
         summary = app.query_one("#connection-summary", expect_type=Static)
         assert "coverage  partial" in str(summary.render())
@@ -251,9 +310,11 @@ async def test_part_connections_show_primitive_features(
         row = table.get_row_at(0)
         assert row[0] == "stud"
         assert row[1] == "male"
-        assert row[4] == "primitive"
-        assert row[5] == "100%"
-        assert row[7] == "free"
+        assert row[2] == "primitive"
+        assert row[3] == "100.0%"
+        detail = app.query_one("#connection-feature-detail", expect_type=Static)
+        assert "position  (-30, -24, -10)" in str(detail.render())
+        assert "occupancy  free" in str(detail.render())
 
 
 async def test_part_connections_show_none_coverage(
@@ -284,19 +345,22 @@ async def test_part_connection_table_shows_occupancy_and_compatibility(
         assert app.parts is not None
         feature = replace(
             app.parts.connections("3001")[0],
+            feature_id="shortcut [/] feature",
             occupied=True,
-            occupied_by="shortcut-assembly",
-            compatible_parts=("3002", "3003"),
+            occupied_by="shortcut [/] assembly",
+            compatible_parts=("3002", "[bold]3003[/bold]"),
         )
-        table = app.query_one(
-            "#connection-features", expect_type=ConnectionFeatureTable
+        geometry = replace(app.parts.geometry("3001"), connections=(feature,))
+        app.query_one("#part-connections", expect_type=PartConnections).show_geometry(
+            geometry
         )
+        await pilot.pause()
 
-        table.set_features((feature,))
-
-        row = table.get_row_at(0)
-        assert row[7] == "occupied by shortcut-assembly"
-        assert row[8] == "3002, 3003"
+        detail = app.query_one("#connection-feature-detail", expect_type=Static)
+        rendered = str(detail.render())
+        assert "feature ID  shortcut [/] feature" in rendered
+        assert "occupancy  occupied by shortcut [/] assembly" in rendered
+        assert "compatible  3002, [bold]3003[/bold]" in rendered
 
 
 async def test_part_connection_diagnostics_stay_out_of_model_issues(
@@ -333,6 +397,26 @@ async def test_part_connection_diagnostics_stay_out_of_model_issues(
         assert app.query_one("#issues-table", expect_type=IssuesTable).row_count == 0
 
 
+async def test_invalid_studio_document_is_shown_as_connection_diagnostic(
+    make_app: Callable[..., PyldrawTuiApp],
+    tmp_path: Path,
+) -> None:
+    studio = tmp_path / "studio.json"
+    studio.write_text("not json")
+    app = make_app(studio_metadata=(studio,))
+
+    async with app.run_test(size=(120, 40)) as pilot:
+        await wait_for_catalog(app, pilot)
+
+        diagnostics = app.query_one(
+            "#connection-diagnostics", expect_type=ConnectionDiagnosticsTable
+        )
+        assert diagnostics.row_count == 1
+        assert "could not read Studio connectivity JSON" in str(
+            diagnostics.get_row_at(0)[3]
+        )
+
+
 async def test_part_connections_show_geometry_diagnostics(
     make_app: Callable[..., PyldrawTuiApp],
 ) -> None:
@@ -342,6 +426,7 @@ async def test_part_connections_show_geometry_diagnostics(
         assert app.parts is not None
         geometry = replace(
             app.parts.geometry("3001"),
+            connection_metadata=None,
             diagnostics=(
                 Diagnostic(
                     message="unresolved fixture subpart",
@@ -357,6 +442,12 @@ async def test_part_connections_show_geometry_diagnostics(
         diagnostics = app.query_one(
             "#connection-diagnostics", expect_type=ConnectionDiagnosticsTable
         )
+        summary = app.query_one("#connection-summary", expect_type=Static)
+        features = app.query_one(
+            "#connection-features", expect_type=ConnectionFeatureTable
+        )
+        assert "coverage  unavailable" in str(summary.render())
+        assert features.row_count == 4
         assert diagnostics.row_count == 1
         row = diagnostics.get_row_at(0)
         assert row[1] == "part.reference_unresolved"
@@ -366,6 +457,7 @@ async def test_part_connections_show_geometry_diagnostics(
 async def test_part_geometry_failure_is_nonfatal(
     make_app: Callable[..., PyldrawTuiApp],
     monkeypatch: pytest.MonkeyPatch,
+    caplog: pytest.LogCaptureFixture,
 ) -> None:
     app = make_app()
     async with app.run_test(size=(120, 40)) as pilot:
@@ -390,9 +482,10 @@ async def test_part_geometry_failure_is_nonfatal(
         assert "Connections unavailable: fixture [/] became unreadable" in str(
             summary.render()
         )
+        assert "Unexpected geometry failure for 3022" in caplog.text
 
 
-async def test_stale_part_geometry_result_is_discarded(
+async def test_part_geometry_requests_are_serialized_and_coalesced(
     make_app: Callable[..., PyldrawTuiApp],
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
@@ -403,27 +496,44 @@ async def test_stale_part_geometry_result_is_discarded(
         original_geometry = app.parts.geometry
         started = threading.Event()
         release = threading.Event()
+        calls: list[str] = []
+        active = 0
+        max_active = 0
+        lock = threading.Lock()
 
         def blocking_geometry(code: str) -> PartGeometry:
-            if code == "3022":
-                started.set()
-                if not release.wait(timeout=5):
-                    raise TimeoutError
-            return original_geometry(code)
+            nonlocal active, max_active
+            with lock:
+                calls.append(code)
+                active += 1
+                max_active = max(max_active, active)
+            try:
+                if code == "3022":
+                    started.set()
+                    if not release.wait(timeout=5):
+                        raise TimeoutError
+                return original_geometry(code)
+            finally:
+                with lock:
+                    active -= 1
 
         monkeypatch.setattr(app.parts, "geometry", blocking_geometry)
         app.focus_part_in_catalog("3022")
         await wait_until(started.is_set, pilot, "part geometry did not start")
         app.focus_part_in_catalog("3901")
         await pilot.pause()
-        release.set()
-        await app.workers.wait_for_complete()
+        app.focus_part_in_catalog("6157")
         await pilot.pause()
 
+        assert calls == ["3022"]
+
+        release.set()
+        await wait_for_catalog(app, pilot)
+
         metadata = app.query_one("#part-metadata", expect_type=Static)
-        summary = app.query_one("#connection-summary", expect_type=Static)
-        assert "code  3901" in str(metadata.render())
-        assert "coverage  none" in str(summary.render())
+        assert "code  6157" in str(metadata.render())
+        assert calls == ["3022", "6157"]
+        assert max_active == 1
 
 
 async def test_palette_marks_solid_colours(make_app):

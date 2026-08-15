@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import json
 import sys
 import zipfile
 from argparse import ArgumentParser
@@ -95,8 +94,7 @@ def _validated_shadow_sources(sources: Iterable[Path]) -> tuple[Path, ...]:
             )
         if path.is_dir():
             try:
-                for _entry in path.iterdir():
-                    pass
+                next(path.iterdir(), None)
             except OSError as error:
                 reason = str(error) or type(error).__name__
                 raise _ConnectionSourceError(
@@ -127,27 +125,32 @@ def _validated_shadow_sources(sources: Iterable[Path]) -> tuple[Path, ...]:
 
 
 def _validated_studio_sources(sources: Iterable[Path]) -> tuple[Path, ...]:
-    """Return normalized Studio JSON sources with a valid document envelope."""
+    """Return normalized, readable Studio JSON files for pyldraw3 to parse."""
     validated: list[Path] = []
     for source in sources:
         path = source.expanduser()
+        if not path.exists():
+            raise _ConnectionSourceError(
+                kind="Studio metadata",
+                path=path,
+                reason="path does not exist",
+            )
+        if not path.is_file():
+            raise _ConnectionSourceError(
+                kind="Studio metadata",
+                path=path,
+                reason="expected a JSON file",
+            )
         try:
-            document = json.loads(path.read_text(encoding="utf-8-sig"))
-        except (OSError, RecursionError, UnicodeError, ValueError) as error:
+            with path.open("rb") as source_file:
+                source_file.read(1)
+        except OSError as error:
             reason = str(error) or type(error).__name__
             raise _ConnectionSourceError(
                 kind="Studio metadata",
                 path=path,
                 reason=reason,
             ) from error
-        if not isinstance(document, dict) or not isinstance(
-            document.get("parts"), list
-        ):
-            raise _ConnectionSourceError(
-                kind="Studio metadata",
-                path=path,
-                reason="expected a JSON object containing a parts list",
-            )
         validated.append(path)
     return tuple(validated)
 
