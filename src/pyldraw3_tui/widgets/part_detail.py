@@ -2,14 +2,15 @@
 
 from __future__ import annotations
 
+import logging
 from pathlib import Path
 from typing import TYPE_CHECKING
 
+from ldraw.errors import PartError
 from rich.text import Text
 from textual import work
 from textual.containers import Vertical, VerticalScroll
 from textual.widgets import Static, TabbedContent, TabPane
-from textual.worker import get_current_worker
 
 from pyldraw3_tui.data.snippets import import_snippet
 from pyldraw3_tui.widgets.colour_swatches import ColourSwatches
@@ -21,6 +22,9 @@ if TYPE_CHECKING:
     from ldraw import PartGeometry
     from ldraw.parts import CatalogEntry, Parts
     from textual.app import ComposeResult
+    from textual.worker import Worker
+
+logger = logging.getLogger(__name__)
 
 
 def _library_root(parts: Parts) -> Path | None:
@@ -53,7 +57,7 @@ def _geometry_lines(geometry: PartGeometry) -> list[tuple[str, str]]:
         lines.append(("studs", f"{top_studs} top"))
     lines.append(("connections", str(len(geometry.connections))))
     if geometry.connection_metadata is not None:
-        lines.append(("conn. coverage", geometry.connection_metadata.coverage.value))
+        lines.append(("coverage", geometry.connection_metadata.coverage.value))
     return lines
 
 
@@ -105,6 +109,10 @@ class PartDetail(Vertical):
         self._parts: Parts | None = None
         self._library_root: Path | None = None
         self._entry: CatalogEntry | None = None
+        self._geometry_worker: Worker[None] | None = None
+        self._active_geometry: tuple[str, Parts] | None = None
+        self._pending_geometry: tuple[str, Parts] | None = None
+        self._displayed_geometry: tuple[str, Parts, PartGeometry] | None = None
 
     def compose(self) -> ComposeResult:
         """Lay out the Info and Sub-parts tabs."""
@@ -135,6 +143,7 @@ class PartDetail(Vertical):
         metadata = self.query_one("#part-metadata", expect_type=Static)
         connections = self.query_one("#part-connections", expect_type=PartConnections)
         if entry is None:
+            self._pending_geometry = None
             metadata.update("No part selected")
             connections.show_empty()
         else:
@@ -142,44 +151,107 @@ class PartDetail(Vertical):
                 _metadata_text(entry=entry, library_root=self._library_root)
             )
             if self._parts is None:
+                self._pending_geometry = None
                 connections.show_unavailable("Catalog not loaded.")
+            elif (
+                self._displayed_geometry is not None
+                and self._displayed_geometry[0] == entry.code
+                and self._displayed_geometry[1] is self._parts
+            ):
+                self._pending_geometry = None
+                self._geometry_ready(
+                    code=entry.code,
+                    parts=self._parts,
+                    geometry=self._displayed_geometry[2],
+                )
             else:
                 connections.show_loading(entry.code)
-                self._load_geometry(code=entry.code, parts=self._parts)
+                self._request_geometry(code=entry.code, parts=self._parts)
         self.query_one("#subpart-tree", expect_type=SubPartTree).set_root_entry(entry)
+
+    def _request_geometry(self, code: str, parts: Parts) -> None:
+        """Coalesce highlights so only one recursive geometry query runs at once."""
+        request = (code, parts)
+        if (
+            self._active_geometry is not None
+            and self._active_geometry[0] == code
+            and self._active_geometry[1] is parts
+        ):
+            self._pending_geometry = None
+            return
+        self._pending_geometry = request
+        if self._geometry_worker is None or self._geometry_worker.is_finished:
+            self._start_pending_geometry()
+
+    def _start_pending_geometry(self) -> None:
+        """Start the newest queued geometry request, if one exists."""
+        request = self._pending_geometry
+        if request is None:
+            return
+        self._pending_geometry = None
+        self._active_geometry = request
+        code, parts = request
+        self._geometry_worker = self._load_geometry(code=code, parts=parts)
 
     @work(
         thread=True,
-        exclusive=True,
         group="part-geometry",
         exit_on_error=False,
     )
     def _load_geometry(self, code: str, parts: Parts) -> None:
-        """Resolve one part off-thread and return only if it is still selected."""
-        worker = get_current_worker()
-        if worker.is_cancelled:
-            return
+        """Resolve one part off-thread and finish through the serialized queue."""
         try:
             geometry = parts.geometry(code)
-        except Exception as error:  # noqa: BLE001 - geometry failures are nonfatal
-            if worker.is_cancelled:
-                return
+        except (OSError, PartError, ValueError) as error:
             reason = str(error) or type(error).__name__
             self.app.call_from_thread(
-                self._geometry_failed,
+                self._geometry_finished,
                 code=code,
                 parts=parts,
+                geometry=None,
                 reason=reason,
             )
             return
-        if worker.is_cancelled:
+        except Exception as error:
+            logger.exception("Unexpected geometry failure for %s", code)
+            reason = str(error) or type(error).__name__
+            self.app.call_from_thread(
+                self._geometry_finished,
+                code=code,
+                parts=parts,
+                geometry=None,
+                reason=reason,
+            )
             return
         self.app.call_from_thread(
-            self._geometry_ready,
+            self._geometry_finished,
             code=code,
             parts=parts,
             geometry=geometry,
+            reason=None,
         )
+
+    def _geometry_finished(
+        self,
+        code: str,
+        parts: Parts,
+        geometry: PartGeometry | None,
+        reason: str | None,
+    ) -> None:
+        """Render the current result, then start only the latest queued request."""
+        self._geometry_worker = None
+        self._active_geometry = None
+        try:
+            if geometry is not None:
+                self._geometry_ready(code=code, parts=parts, geometry=geometry)
+            else:
+                self._geometry_failed(
+                    code=code,
+                    parts=parts,
+                    reason=reason or "Unknown geometry failure",
+                )
+        finally:
+            self._start_pending_geometry()
 
     def _geometry_ready(
         self,
@@ -190,6 +262,7 @@ class PartDetail(Vertical):
         """Render a completed geometry query if its selection is current."""
         if self._entry is None or self._entry.code != code or self._parts is not parts:
             return
+        self._displayed_geometry = (code, parts, geometry)
         self.query_one("#part-metadata", expect_type=Static).update(
             _metadata_text(
                 entry=self._entry,
@@ -205,6 +278,7 @@ class PartDetail(Vertical):
         """Render a nonfatal geometry failure if its selection is current."""
         if self._entry is None or self._entry.code != code or self._parts is not parts:
             return
+        self._displayed_geometry = None
         self.query_one("#part-metadata", expect_type=Static).update(
             _metadata_text(
                 entry=self._entry,

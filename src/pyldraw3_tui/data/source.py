@@ -21,6 +21,7 @@ from ldraw.session import LDrawStateReason
 from pyldraw3_tui.errors import ModelLoadError
 
 if TYPE_CHECKING:
+    from ldraw import Diagnostic
     from ldraw.model import Model
     from ldraw.parts import Parts
 
@@ -42,6 +43,11 @@ class CatalogSource:
     config_file: Path | None = field(default=None, kw_only=True)
     connection_shadows: tuple[Path, ...] = field(default=(), kw_only=True)
     studio_metadata: tuple[Path, ...] = field(default=(), kw_only=True)
+    last_diagnostics: tuple[Diagnostic, ...] = field(
+        default=(),
+        init=False,
+        repr=False,
+    )
 
     @classmethod
     def from_default_config(
@@ -103,8 +109,14 @@ class CatalogSource:
             connection_shadows=self.connection_shadows,
             studio_metadata=self.studio_metadata,
         )
+        self.last_diagnostics = result.diagnostics
         if result.parts is None:
-            raise FileNotFoundError(self.parts_lst_path)
+            reason = (
+                result.diagnostics[0].message
+                if result.diagnostics
+                else str(self.parts_lst_path)
+            )
+            raise FileNotFoundError(reason)
         return result.parts
 
     def open_model(self, path: Path | str) -> Model:

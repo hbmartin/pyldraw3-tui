@@ -41,6 +41,7 @@ from pyldraw3_tui.widgets.subpart_tree import SubPartTree
 if TYPE_CHECKING:
     from pathlib import Path
 
+    from ldraw import Diagnostic
     from ldraw.parts import CatalogEntry, Parts
     from textual.app import ComposeResult
     from textual.worker import Worker
@@ -170,13 +171,21 @@ class PyldrawTuiApp(App[None]):
             reason = str(error) or type(error).__name__
             self.call_from_thread(self._catalog_failed, reason)
             return
-        self.call_from_thread(self._catalog_ready, parts)
+        self.call_from_thread(
+            self._catalog_ready,
+            parts,
+            self.source.last_diagnostics,
+        )
 
     def _catalog_failed(self, reason: str) -> None:
         self.query_one("#catalog-view", expect_type=CatalogView).loading = False
         self.notify(f"Could not load the catalog: {reason}", severity="error")
 
-    def _catalog_ready(self, parts: Parts) -> None:
+    def _catalog_ready(
+        self,
+        parts: Parts,
+        diagnostics: tuple[Diagnostic, ...] = (),
+    ) -> None:
         self.parts = parts
         self.search_index = SearchIndex.from_catalog(parts.catalog)
         catalog_view = self.query_one("#catalog-view", expect_type=CatalogView)
@@ -186,6 +195,14 @@ class PyldrawTuiApp(App[None]):
         if self.query_one("#main-tabs", expect_type=TabbedContent).active == "catalog":
             self.query_one("#parts-list", expect_type=PartsList).focus()
         self.notify(f"Catalog loaded: {len(parts.catalog.by_code)} parts")
+        for diagnostic in diagnostics:
+            self.notify(
+                diagnostic.message,
+                severity=(
+                    "error" if diagnostic.severity.value == "error" else "warning"
+                ),
+                timeout=10,
+            )
 
     async def on_unmount(self) -> None:
         """Close Rebrickable resources without persisting credentials."""

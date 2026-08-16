@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import zipfile
 from types import SimpleNamespace
-from typing import TYPE_CHECKING, Never, cast
+from typing import TYPE_CHECKING, cast
 
 import pytest
 
@@ -90,14 +90,7 @@ def test_connection_source_flags_preserve_order(
     [
         ("--ldcad-shadow", "missing.csl", None, "path does not exist"),
         ("--ldcad-shadow", "bad.csl", "not a zip", "File is not a zip file"),
-        ("--studio-metadata", "missing.json", None, "No such file"),
-        ("--studio-metadata", "bad.json", "not json", "Expecting value"),
-        (
-            "--studio-metadata",
-            "wrong-shape.json",
-            "{}",
-            "expected a JSON object containing a parts list",
-        ),
+        ("--studio-metadata", "missing.json", None, "path does not exist"),
     ],
 )
 def test_invalid_connection_source_exits_before_app(
@@ -149,28 +142,62 @@ def test_unreadable_shadow_directory_exits_before_app(
     assert "ran" not in captured
 
 
-def test_recursive_studio_document_exits_before_app(
+def test_shadow_directory_validation_reads_only_one_entry(
+    fixture_config: Config,
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    captured = _stub_main(monkeypatch, fixture_config)
+    shadow = tmp_path / "shadow"
+    shadow.mkdir()
+    first = shadow / "parts"
+    path_type = type(shadow)
+
+    def one_then_fail(_path: Path) -> Iterator[Path]:
+        yield first
+        message = "validation enumerated more than one entry"
+        raise AssertionError(message)
+
+    monkeypatch.setattr(path_type, "iterdir", one_then_fail)
+
+    main(["--ldcad-shadow", str(shadow)])
+
+    assert captured["ran"] is True
+
+
+def test_studio_source_must_be_a_file(
     fixture_config: Config,
     monkeypatch: pytest.MonkeyPatch,
     tmp_path: Path,
     capsys: pytest.CaptureFixture[str],
 ) -> None:
     captured = _stub_main(monkeypatch, fixture_config)
-    studio = tmp_path / "recursive.json"
-    studio.write_text('{"parts": []}')
+    studio = tmp_path / "studio"
+    studio.mkdir()
 
-    def reject_recursive_document(_contents: str) -> Never:
-        message = "maximum recursion depth exceeded"
-        raise RecursionError(message)
-
-    monkeypatch.setattr(main_module.json, "loads", reject_recursive_document)
-
-    with pytest.raises(SystemExit) as excinfo:
+    with pytest.raises(SystemExit):
         main(["--studio-metadata", str(studio)])
 
-    assert excinfo.value.code == 1
-    assert "maximum recursion depth exceeded" in capsys.readouterr().err
+    assert "expected a JSON file" in capsys.readouterr().err
     assert "ran" not in captured
+
+
+@pytest.mark.parametrize("contents", ["not json", "{}"])
+def test_studio_document_parsing_is_deferred_to_pyldraw(
+    fixture_config: Config,
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+    contents: str,
+) -> None:
+    captured = _stub_main(monkeypatch, fixture_config)
+    studio = tmp_path / "studio.json"
+    studio.write_text(contents)
+
+    main(["--studio-metadata", str(studio)])
+
+    source = cast("CatalogSource", captured["source"])
+    assert source.studio_metadata == (studio,)
+    assert captured["ran"] is True
 
 
 def test_unsupported_studio_row_is_not_a_startup_error(
