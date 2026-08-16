@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import webbrowser
-from typing import TYPE_CHECKING, ClassVar
+from typing import TYPE_CHECKING, ClassVar, cast
 
 from ldraw.bom import rows_to_csv, rows_to_json
 from rebrickable import ConfigLoadError as RebrickableConfigLoadError
@@ -44,6 +44,7 @@ if TYPE_CHECKING:
     from ldraw import Diagnostic
     from ldraw.parts import CatalogEntry, Parts
     from textual.app import ComposeResult
+    from textual.notifications import SeverityLevel
     from textual.worker import Worker
 
     from pyldraw3_tui.screens.help import BindingSections
@@ -166,15 +167,15 @@ class PyldrawTuiApp(App[None]):
     def _load_catalog(self) -> None:
         """Load (and index) the catalog off the UI thread."""
         try:
-            parts = self.source.load()
+            result = self.source.load()
         except Exception as error:  # noqa: BLE001
             reason = str(error) or type(error).__name__
             self.call_from_thread(self._catalog_failed, reason)
             return
         self.call_from_thread(
             self._catalog_ready,
-            parts,
-            self.source.last_diagnostics,
+            result.parts,
+            result.diagnostics,
         )
 
     def _catalog_failed(self, reason: str) -> None:
@@ -198,10 +199,9 @@ class PyldrawTuiApp(App[None]):
         for diagnostic in diagnostics:
             self.notify(
                 diagnostic.message,
-                severity=(
-                    "error" if diagnostic.severity.value == "error" else "warning"
-                ),
+                severity=cast("SeverityLevel", str(diagnostic.severity)),
                 timeout=10,
+                markup=False,
             )
 
     async def on_unmount(self) -> None:

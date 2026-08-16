@@ -36,12 +36,16 @@ class ConnectionFeatureTable(DataTable[Text | str]):
         Binding("k", "cursor_up", show=False),
     ]
 
+    def __init__(self, *, id: str | None = None) -> None:  # noqa: A002 - Textual idiom
+        super().__init__(id=id)
+        self._features: tuple[ConnectionFeature, ...] = ()
+
     def on_mount(self) -> None:
         """Configure columns and row-based cursor navigation."""
-        self._features: tuple[ConnectionFeature, ...] = ()
         self.cursor_type = "row"
         self.zebra_stripes = True
-        self.add_columns("Kind", "Role", "Source", "Confidence")
+        if not self.columns:
+            self.add_columns("Kind", "Role", "Source", "Confidence")
 
     def set_features(self, features: Sequence[ConnectionFeature]) -> None:
         """Replace rows with connection features in pyldraw3 order."""
@@ -61,6 +65,16 @@ class ConnectionFeatureTable(DataTable[Text | str]):
         if 0 <= row < len(self._features):
             return self._features[row]
         return None
+
+    def feature_for_key(self, key: str | None) -> ConnectionFeature | None:
+        """Return the feature identified by a stable DataTable row key."""
+        if key is None:
+            return None
+        try:
+            index = int(key)
+        except ValueError:
+            return None
+        return self.feature_at(index)
 
 
 class ConnectionDiagnosticsTable(DataTable[Text | str]):
@@ -142,6 +156,9 @@ class PartConnections(Vertical):
     """Metadata summary, typed feature rows, and warnings for one part."""
 
     DEFAULT_CSS = """
+    PartConnections {
+        overflow-y: auto;
+    }
     PartConnections > #connection-summary {
         height: auto;
         padding: 0 1 1 1;
@@ -152,7 +169,6 @@ class PartConnections(Vertical):
     }
     PartConnections > #connection-feature-detail {
         height: auto;
-        max-height: 6;
         padding: 0 1 1 1;
     }
     PartConnections > #connection-diagnostics {
@@ -208,10 +224,11 @@ class PartConnections(Vertical):
     @on(DataTable.RowHighlighted, "#connection-features")
     def _feature_highlighted(self, event: DataTable.RowHighlighted) -> None:
         """Show wide fields for the selected compact feature row."""
-        table = self.query_one(
-            "#connection-features", expect_type=ConnectionFeatureTable
-        )
-        self._show_feature_detail(table.feature_at(event.cursor_row))
+        event.stop()
+        table = event.data_table
+        if not isinstance(table, ConnectionFeatureTable):
+            return
+        self._show_feature_detail(table.feature_for_key(event.row_key.value))
 
     def _show_feature_detail(self, feature: ConnectionFeature | None) -> None:
         self.query_one("#connection-feature-detail", expect_type=Static).update(

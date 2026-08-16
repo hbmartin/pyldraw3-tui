@@ -26,10 +26,15 @@ async def wait_for_catalog(app: PyldrawTuiApp, pilot: Pilot) -> None:
             view = app.query_one("#catalog-view", expect_type=CatalogView)
             summary = app.query_one("#connection-summary", expect_type=Static)
             summary_text = str(summary.render())
-            detail_settled = app.parts is None or (
-                view.selected_entry is not None
-                and summary_text != "No part selected"
-                and not summary_text.startswith("Loading connections for ")
+            catalog_empty = app.parts is not None and not app.parts.catalog.by_code
+            detail_settled = (
+                app.parts is None
+                or catalog_empty
+                or (
+                    view.selected_entry is not None
+                    and summary_text != "No part selected"
+                    and not summary_text.startswith("Loading connections for ")
+                )
             )
             if not tuple(app.workers) and not view.loading and detail_settled:
                 return

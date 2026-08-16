@@ -7,7 +7,7 @@ import zipfile
 from argparse import ArgumentParser
 from importlib.metadata import PackageNotFoundError, version
 from pathlib import Path
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Never
 
 from ldraw.config import Config
 from ldraw.errors import ConfigLoadError
@@ -25,6 +25,26 @@ class _ConnectionSourceError(ValueError):
     def __init__(self, kind: str, path: Path, reason: str) -> None:
         message = f"{kind} {path}: {reason}"
         super().__init__(message)
+
+
+def _normalized_source(source: Path, *, kind: str) -> Path:
+    """Expand a connection source path and require it to exist."""
+    path = source.expanduser()
+    if not path.exists():
+        raise _ConnectionSourceError(kind, path, "path does not exist")
+    return path
+
+
+def _require_file(path: Path, *, kind: str, expected: str) -> None:
+    """Require an existing connection source to be a regular file."""
+    if not path.is_file():
+        raise _ConnectionSourceError(kind, path, expected)
+
+
+def _raise_source_error(kind: str, path: Path, error: BaseException) -> Never:
+    """Raise an I/O or archive error with connection-source context."""
+    reason = str(error) or type(error).__name__
+    raise _ConnectionSourceError(kind, path, reason) from error
 
 
 def _package_version() -> str:
@@ -85,41 +105,24 @@ def _validated_shadow_sources(sources: Iterable[Path]) -> tuple[Path, ...]:
     """Return normalized, readable LDCad shadow sources in registration order."""
     validated: list[Path] = []
     for source in sources:
-        path = source.expanduser()
-        if not path.exists():
-            raise _ConnectionSourceError(
-                kind="LDCad shadow",
-                path=path,
-                reason="path does not exist",
-            )
+        path = _normalized_source(source, kind="LDCad shadow")
         if path.is_dir():
             try:
                 next(path.iterdir(), None)
             except OSError as error:
-                reason = str(error) or type(error).__name__
-                raise _ConnectionSourceError(
-                    kind="LDCad shadow",
-                    path=path,
-                    reason=reason,
-                ) from error
+                _raise_source_error("LDCad shadow", path, error)
             validated.append(path)
             continue
-        if not path.is_file():
-            raise _ConnectionSourceError(
-                kind="LDCad shadow",
-                path=path,
-                reason="expected a directory or ZIP/CSL archive",
-            )
+        _require_file(
+            path,
+            kind="LDCad shadow",
+            expected="expected a directory or ZIP/CSL archive",
+        )
         try:
             with zipfile.ZipFile(path) as archive:
                 archive.infolist()
         except (OSError, zipfile.BadZipFile) as error:
-            reason = str(error) or type(error).__name__
-            raise _ConnectionSourceError(
-                kind="LDCad shadow",
-                path=path,
-                reason=reason,
-            ) from error
+            _raise_source_error("LDCad shadow", path, error)
         validated.append(path)
     return tuple(validated)
 
@@ -128,29 +131,17 @@ def _validated_studio_sources(sources: Iterable[Path]) -> tuple[Path, ...]:
     """Return normalized, readable Studio JSON files for pyldraw3 to parse."""
     validated: list[Path] = []
     for source in sources:
-        path = source.expanduser()
-        if not path.exists():
-            raise _ConnectionSourceError(
-                kind="Studio metadata",
-                path=path,
-                reason="path does not exist",
-            )
-        if not path.is_file():
-            raise _ConnectionSourceError(
-                kind="Studio metadata",
-                path=path,
-                reason="expected a JSON file",
-            )
+        path = _normalized_source(source, kind="Studio metadata")
+        _require_file(
+            path,
+            kind="Studio metadata",
+            expected="expected a JSON file",
+        )
         try:
             with path.open("rb") as source_file:
                 source_file.read(1)
         except OSError as error:
-            reason = str(error) or type(error).__name__
-            raise _ConnectionSourceError(
-                kind="Studio metadata",
-                path=path,
-                reason=reason,
-            ) from error
+            _raise_source_error("Studio metadata", path, error)
         validated.append(path)
     return tuple(validated)
 
