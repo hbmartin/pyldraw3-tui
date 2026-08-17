@@ -180,7 +180,11 @@ class PyldrawTuiApp(App[None]):
 
     def _catalog_failed(self, reason: str) -> None:
         self.query_one("#catalog-view", expect_type=CatalogView).loading = False
-        self.notify(f"Could not load the catalog: {reason}", severity="error")
+        self.notify(
+            f"Could not load the catalog: {reason}",
+            severity="error",
+            markup=False,
+        )
 
     def _catalog_ready(
         self,

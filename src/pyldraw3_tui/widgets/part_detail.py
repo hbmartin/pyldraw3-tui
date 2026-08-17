@@ -285,12 +285,15 @@ class PartDetail(Vertical):
         self._geometry_worker = None
         self._active_geometry = None
         if active is not None and pending is None:
-            error = event.worker.error
-            reason = (
-                str(error) or type(error).__name__
-                if error is not None
-                else "Geometry loading was cancelled"
-            )
+            if event.state is WorkerState.CANCELLED:
+                reason = "Geometry loading was cancelled"
+            else:
+                error = event.worker.error
+                reason = (
+                    str(error) or type(error).__name__
+                    if error is not None
+                    else "Geometry loading failed"
+                )
             self._geometry_failed(code=active[0], parts=active[1], reason=reason)
         self._start_pending_geometry()
 
