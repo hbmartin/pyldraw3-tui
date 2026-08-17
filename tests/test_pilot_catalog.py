@@ -171,19 +171,31 @@ async def test_wait_for_catalog_handles_an_empty_catalog(
         assert view.selected_entry is None
 
 
-async def test_catalog_load_failure_clears_loading(fixture_config):
-    class FailingSource(CatalogSource):
-        """Catalog source that simulates an unexpected load failure."""
-
-        def load(self) -> Never:
-            """Raise an unexpected error from the worker boundary."""
-            raise RuntimeError("boom")
-
-    app = app_module.PyldrawTuiApp(source=FailingSource(config=fixture_config))
+async def test_catalog_load_failure_clears_loading(
+    fixture_config: Config,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    error = Diagnostic(message="catalog [/] unavailable", severity=Severity.ERROR)
+    result = SimpleNamespace(parts=None, diagnostics=(error,))
+    monkeypatch.setattr(
+        LDrawSession,
+        "prepare_catalog",
+        lambda _session, **_kwargs: result,
+    )
+    source = CatalogSource(config=fixture_config)
+    app = app_module.PyldrawTuiApp(source=source)
+    notifications = capture_notifications(app, monkeypatch)
     async with app.run_test(size=(120, 40)) as pilot:
         await wait_for_catalog(app, pilot)
         view = app.query_one("#catalog-view", expect_type=CatalogView)
         assert not view.loading
+        assert any(
+            message.startswith(f"Could not load the catalog: {error.message}")
+            and str(source.parts_lst_path) in message
+            and kwargs.get("severity") == "error"
+            and kwargs.get("markup") is False
+            for message, kwargs in notifications
+        )
 
 
 async def test_catalog_preparation_diagnostics_are_notified(
@@ -382,6 +394,32 @@ async def test_connection_feature_table_preserves_state_when_remounted(
         assert len(table.columns) == 4
         assert table.row_count == expected_rows
         assert table.feature_at(0) is expected_feature
+
+
+async def test_connection_diagnostics_table_preserves_state_when_remounted(
+    make_app: Callable[..., PyldrawTuiApp],
+) -> None:
+    app = make_app()
+    async with app.run_test(size=(120, 40)) as pilot:
+        await wait_for_catalog(app, pilot)
+        table = app.query_one(
+            "#connection-diagnostics", expect_type=ConnectionDiagnosticsTable
+        )
+        parent = table.parent
+        assert isinstance(parent, PartConnections)
+        diagnostic = Diagnostic(
+            message="remount [/] warning",
+            code=DiagnosticCode.PART_REFERENCE_UNRESOLVED,
+        )
+        table.set_diagnostics((diagnostic,))
+
+        await table.remove()
+        await parent.mount(table)
+        await pilot.pause()
+
+        assert len(table.columns) == 4
+        assert table.row_count == 1
+        assert str(table.get_row_at(0)[3]) == diagnostic.message
 
 
 async def test_connection_highlight_uses_stable_row_key(
@@ -584,15 +622,14 @@ async def test_cached_part_metadata_is_rendered_once(
 
 
 @pytest.mark.parametrize(
-    ("state", "error", "reason"),
+    ("error", "reason"),
     [
-        (WorkerState.CANCELLED, None, "Geometry loading was cancelled"),
-        (WorkerState.ERROR, RuntimeError("worker exploded"), "worker exploded"),
+        (RuntimeError("worker exploded"), "worker exploded"),
+        (None, "Geometry loading failed"),
     ],
 )
-async def test_terminal_geometry_worker_releases_active_request(
+async def test_error_geometry_worker_releases_active_request(
     make_app: Callable[..., PyldrawTuiApp],
-    state: WorkerState,
     error: BaseException | None,
     reason: str,
 ) -> None:
@@ -608,7 +645,7 @@ async def test_terminal_geometry_worker_releases_active_request(
         detail._geometry_worker = stale_worker  # noqa: SLF001
         detail._active_geometry = (entry.code, app.parts, 1)  # noqa: SLF001
 
-        event = Worker.StateChanged(stale_worker, state)
+        event = Worker.StateChanged(stale_worker, WorkerState.ERROR)
         detail._geometry_worker_state_changed(event)  # noqa: SLF001
 
         assert detail._geometry_worker is None  # noqa: SLF001
@@ -619,6 +656,54 @@ async def test_terminal_geometry_worker_releases_active_request(
         detail.show_entry(entry)
         await wait_for_catalog(app, pilot)
         assert "connections  4" in str(metadata.render())
+
+
+async def test_cancelled_geometry_worker_reports_clear_reason(
+    make_app: Callable[..., PyldrawTuiApp],
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    app = make_app()
+    async with app.run_test(size=(120, 40)) as pilot:
+        await wait_for_catalog(app, pilot)
+        assert app.parts is not None
+        original_geometry = app.parts.geometry
+        started = threading.Event()
+        release = threading.Event()
+        completed = threading.Event()
+
+        def blocking_geometry(code: str) -> PartGeometry:
+            try:
+                if code == "3022":
+                    started.set()
+                    if not release.wait(timeout=5):
+                        raise TimeoutError
+                return original_geometry(code)
+            finally:
+                completed.set()
+
+        monkeypatch.setattr(app.parts, "geometry", blocking_geometry)
+        app.focus_part_in_catalog("3022")
+        await wait_until(started.is_set, pilot, "part geometry did not start")
+        detail = app.query_one("#part-detail", expect_type=PartDetail)
+        worker = detail._geometry_worker  # noqa: SLF001
+        assert worker is not None
+
+        try:
+            worker.cancel()
+            await wait_until(
+                lambda: detail._geometry_worker is None,  # noqa: SLF001
+                pilot,
+                "cancelled geometry worker was not released",
+            )
+            assert isinstance(worker.error, asyncio.CancelledError)
+            metadata = app.query_one("#part-metadata", expect_type=Static)
+            rendered = str(metadata.render())
+            assert "geometry  unavailable: Geometry loading was cancelled" in rendered
+            assert "CancelledError" not in rendered
+        finally:
+            release.set()
+        await wait_until(completed.is_set, pilot, "geometry thread did not finish")
+        await pilot.pause()
 
 
 async def test_late_geometry_result_cannot_clobber_new_request(

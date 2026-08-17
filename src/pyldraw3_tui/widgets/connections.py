@@ -89,7 +89,8 @@ class ConnectionDiagnosticsTable(DataTable[Text | str]):
         """Configure diagnostic columns and row-based cursor navigation."""
         self.cursor_type = "row"
         self.zebra_stripes = True
-        self.add_columns("Line", "Code", "Path", "Message")
+        if not self.columns:
+            self.add_columns("Line", "Code", "Path", "Message")
 
     def set_diagnostics(self, diagnostics: Sequence[Diagnostic]) -> None:
         """Replace rows with structured geometry and metadata diagnostics."""
