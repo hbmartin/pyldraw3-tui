@@ -13,7 +13,7 @@ from enum import Enum
 from pathlib import Path
 from typing import TYPE_CHECKING, Self
 
-from ldraw import LDrawSession
+from ldraw import LDrawSession, Severity
 from ldraw.config import Config
 from ldraw.errors import PartError
 from ldraw.session import LDrawStateReason
@@ -35,6 +35,14 @@ class SourceState(Enum):
     INDEX_STALE = "index-stale"
 
 
+@dataclass(frozen=True, slots=True)
+class CatalogLoadResult:
+    """A usable parts catalog and diagnostics produced while preparing it."""
+
+    parts: Parts
+    diagnostics: tuple[Diagnostic, ...] = ()
+
+
 @dataclass(slots=True)
 class CatalogSource:
     """Load the parts catalog and model files for one configuration."""
@@ -43,11 +51,6 @@ class CatalogSource:
     config_file: Path | None = field(default=None, kw_only=True)
     connection_shadows: tuple[Path, ...] = field(default=(), kw_only=True)
     studio_metadata: tuple[Path, ...] = field(default=(), kw_only=True)
-    last_diagnostics: tuple[Diagnostic, ...] = field(
-        default=(),
-        init=False,
-        repr=False,
-    )
 
     @classmethod
     def from_default_config(
@@ -99,7 +102,7 @@ class CatalogSource:
             return SourceState.INDEX_STALE
         return SourceState.READY
 
-    def load(self) -> Parts:
+    def load(self) -> CatalogLoadResult:
         """Load the catalog, building and persisting the index as needed.
 
         Blocking (file I/O over the whole library on a cold index) — run
@@ -109,15 +112,24 @@ class CatalogSource:
             connection_shadows=self.connection_shadows,
             studio_metadata=self.studio_metadata,
         )
-        self.last_diagnostics = result.diagnostics
         if result.parts is None:
-            reason = (
-                result.diagnostics[0].message
-                if result.diagnostics
-                else str(self.parts_lst_path)
+            error = next(
+                (
+                    diagnostic
+                    for diagnostic in result.diagnostics
+                    if diagnostic.severity is Severity.ERROR
+                ),
+                None,
             )
+            path = str(self.parts_lst_path)
+            reason = error.message if error is not None else path
+            if path not in reason:
+                reason = f"{reason}: {path}"
             raise FileNotFoundError(reason)
-        return result.parts
+        return CatalogLoadResult(
+            parts=result.parts,
+            diagnostics=result.diagnostics,
+        )
 
     def open_model(self, path: Path | str) -> Model:
         """Read a ``.ldr``/``.mpd`` file, wrapping failures for the UI."""

@@ -5,15 +5,22 @@ from __future__ import annotations
 import asyncio
 import threading
 from dataclasses import dataclass, field, replace
-from typing import TYPE_CHECKING, Never
+from pathlib import Path
+from types import SimpleNamespace
+from typing import TYPE_CHECKING, Never, cast
 
 import pytest
 from ldraw import Diagnostic, DiagnosticCode, Severity
+from ldraw.config import Config
 from ldraw.parts import MinifigSection, PartCategory
 from ldraw.session import LDrawSession
-from textual.widgets import Static
+from textual.widgets import DataTable, Static, TabbedContent
+from textual.widgets.data_table import RowKey
+from textual.worker import Worker, WorkerState
 
 import pyldraw3_tui.app as app_module
+import pyldraw3_tui.widgets.connections as connections_module
+import pyldraw3_tui.widgets.part_detail as part_detail_module
 from pyldraw3_tui.data.source import CatalogSource, SourceState
 from pyldraw3_tui.messages import CategoryScope, PartHighlighted
 from pyldraw3_tui.screens.catalog import CatalogView
@@ -27,17 +34,17 @@ from pyldraw3_tui.widgets.connections import (
 )
 from pyldraw3_tui.widgets.filter_box import FilterBox
 from pyldraw3_tui.widgets.issues_table import IssuesTable
-from pyldraw3_tui.widgets.part_detail import _metadata_text
+from pyldraw3_tui.widgets.part_detail import PartDetail, _metadata_text
 from pyldraw3_tui.widgets.parts_list import PartsList
 from pyldraw3_tui.widgets.subpart_tree import SubPartTree
 from tests.helpers import wait_for_catalog
 
 if TYPE_CHECKING:
     from collections.abc import Callable
-    from pathlib import Path
 
     from ldraw import PartGeometry
     from ldraw.session import CatalogPreparationResult
+    from rich.text import Text
 
     from pyldraw3_tui.app import PyldrawTuiApp
 
@@ -116,7 +123,7 @@ def test_blocking_catalog_source_preserves_connection_sources(
         studio_metadata=(studio,),
     )
 
-    parts = source.load()
+    parts = source.load().parts
 
     assert [
         feature.feature_id for feature in parts.connection_metadata("3901").features
@@ -132,6 +139,36 @@ async def test_catalog_loads_and_selects_first_part(make_app):
         view = app.query_one("#catalog-view", expect_type=CatalogView)
         assert view.selected_entry is not None
         assert view.selected_entry.code == "3001"
+
+
+async def test_wait_for_catalog_handles_an_empty_catalog(
+    fixture_config: Config,
+    tmp_path: Path,
+) -> None:
+    library = tmp_path / "empty-library"
+    ldraw = library / "ldraw"
+    ldraw.mkdir(parents=True)
+    (ldraw / "parts.lst").write_text("")
+    fixture_ldraw = Path(fixture_config.ldraw_library_path) / "ldraw"
+    (ldraw / "LDConfig.ldr").write_text((fixture_ldraw / "LDConfig.ldr").read_text())
+    app = app_module.PyldrawTuiApp(
+        source=CatalogSource(
+            config=Config(
+                ldraw_library_path=str(library),
+                generated_path=str(tmp_path / "generated"),
+            )
+        ),
+        rebrickable_data=None,
+    )
+
+    async with app.run_test(size=(120, 40)) as pilot:
+        async with asyncio.timeout(2):
+            await wait_for_catalog(app, pilot)
+
+        assert app.parts is not None
+        assert not app.parts.catalog.by_code
+        view = app.query_one("#catalog-view", expect_type=CatalogView)
+        assert view.selected_entry is None
 
 
 async def test_catalog_load_failure_clears_loading(fixture_config):
@@ -155,7 +192,7 @@ async def test_catalog_preparation_diagnostics_are_notified(
 ) -> None:
     original_prepare = LDrawSession.prepare_catalog
     warning = Diagnostic(
-        message="catalog index could not be persisted",
+        message="catalog [/] index could not be persisted",
         severity=Severity.WARNING,
         code=DiagnosticCode.CATALOG_PERSIST_FAILED,
     )
@@ -175,7 +212,9 @@ async def test_catalog_preparation_diagnostics_are_notified(
         await wait_for_catalog(app, pilot)
 
         assert any(
-            message == warning.message and kwargs.get("severity") == "warning"
+            message == warning.message
+            and kwargs.get("severity") == "warning"
+            and kwargs.get("markup") is False
             for message, kwargs in notifications
         )
 
@@ -290,6 +329,10 @@ def test_part_metadata_includes_geometry(parts):
     assert "coverage  partial" in text
 
 
+def test_connection_feature_table_is_usable_before_mount() -> None:
+    assert ConnectionFeatureTable().feature_at(0) is None
+
+
 async def test_part_connections_show_primitive_features(
     make_app: Callable[..., PyldrawTuiApp],
 ) -> None:
@@ -315,6 +358,56 @@ async def test_part_connections_show_primitive_features(
         detail = app.query_one("#connection-feature-detail", expect_type=Static)
         assert "position  (-30, -24, -10)" in str(detail.render())
         assert "occupancy  free" in str(detail.render())
+
+
+async def test_connection_feature_table_preserves_state_when_remounted(
+    make_app: Callable[..., PyldrawTuiApp],
+) -> None:
+    app = make_app()
+    async with app.run_test(size=(120, 40)) as pilot:
+        await wait_for_catalog(app, pilot)
+        table = app.query_one(
+            "#connection-features", expect_type=ConnectionFeatureTable
+        )
+        parent = table.parent
+        detail = app.query_one("#connection-feature-detail", expect_type=Static)
+        assert isinstance(parent, PartConnections)
+        expected_feature = table.feature_at(0)
+        expected_rows = table.row_count
+
+        await table.remove()
+        await parent.mount(table, before=detail)
+        await pilot.pause()
+
+        assert len(table.columns) == 4
+        assert table.row_count == expected_rows
+        assert table.feature_at(0) is expected_feature
+
+
+async def test_connection_highlight_uses_stable_row_key(
+    make_app: Callable[..., PyldrawTuiApp],
+) -> None:
+    app = make_app()
+    async with app.run_test(size=(120, 40)) as pilot:
+        await wait_for_catalog(app, pilot)
+        panel = app.query_one("#part-connections", expect_type=PartConnections)
+        table = app.query_one(
+            "#connection-features", expect_type=ConnectionFeatureTable
+        )
+        second_feature = table.feature_at(1)
+        assert second_feature is not None
+
+        panel._feature_highlighted(  # noqa: SLF001
+            DataTable.RowHighlighted(table, cursor_row=0, row_key=RowKey("1"))
+        )
+
+        detail = app.query_one("#connection-feature-detail", expect_type=Static)
+        assert (
+            str(detail.render())
+            == connections_module._feature_details(  # noqa: SLF001
+                second_feature
+            ).plain
+        )
 
 
 async def test_part_connections_show_none_coverage(
@@ -348,19 +441,28 @@ async def test_part_connection_table_shows_occupancy_and_compatibility(
             feature_id="shortcut [/] feature",
             occupied=True,
             occupied_by="shortcut [/] assembly",
-            compatible_parts=("3002", "[bold]3003[/bold]"),
+            compatible_parts=tuple(
+                f"[bold]long-compatible-part-{index}[/bold]" for index in range(12)
+            ),
         )
         geometry = replace(app.parts.geometry("3001"), connections=(feature,))
         app.query_one("#part-connections", expect_type=PartConnections).show_geometry(
             geometry
         )
+        app.query_one(
+            "#detail-tabs", expect_type=TabbedContent
+        ).active = "tab-connections"
         await pilot.pause()
 
         detail = app.query_one("#connection-feature-detail", expect_type=Static)
         rendered = str(detail.render())
         assert "feature ID  shortcut [/] feature" in rendered
         assert "occupancy  occupied by shortcut [/] assembly" in rendered
-        assert "compatible  3002, [bold]3003[/bold]" in rendered
+        assert "[bold]long-compatible-part-11[/bold]" in rendered
+        visible = "\n".join(
+            detail.render_line(row).text for row in range(detail.size.height)
+        )
+        assert "long-compatible-part-11" in visible
 
 
 async def test_part_connection_diagnostics_stay_out_of_model_issues(
@@ -454,6 +556,99 @@ async def test_part_connections_show_geometry_diagnostics(
         assert str(row[3]) == "unresolved fixture subpart"
 
 
+async def test_cached_part_metadata_is_rendered_once(
+    make_app: Callable[..., PyldrawTuiApp],
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    app = make_app()
+    async with app.run_test(size=(120, 40)) as pilot:
+        await wait_for_catalog(app, pilot)
+        view = app.query_one("#catalog-view", expect_type=CatalogView)
+        detail = app.query_one("#part-detail", expect_type=PartDetail)
+        entry = view.selected_entry
+        assert entry is not None
+        original_metadata_text = part_detail_module._metadata_text  # noqa: SLF001
+        render_calls = 0
+
+        def tracked_metadata_text(*args, **kwargs) -> Text:
+            nonlocal render_calls
+            render_calls += 1
+            return original_metadata_text(*args, **kwargs)
+
+        monkeypatch.setattr(part_detail_module, "_metadata_text", tracked_metadata_text)
+
+        detail.show_entry(entry)
+        await pilot.pause()
+
+        assert render_calls == 1
+
+
+@pytest.mark.parametrize(
+    ("state", "error", "reason"),
+    [
+        (WorkerState.CANCELLED, None, "Geometry loading was cancelled"),
+        (WorkerState.ERROR, RuntimeError("worker exploded"), "worker exploded"),
+    ],
+)
+async def test_terminal_geometry_worker_releases_active_request(
+    make_app: Callable[..., PyldrawTuiApp],
+    state: WorkerState,
+    error: BaseException | None,
+    reason: str,
+) -> None:
+    app = make_app()
+    async with app.run_test(size=(120, 40)) as pilot:
+        await wait_for_catalog(app, pilot)
+        assert app.parts is not None
+        view = app.query_one("#catalog-view", expect_type=CatalogView)
+        detail = app.query_one("#part-detail", expect_type=PartDetail)
+        entry = view.selected_entry
+        assert entry is not None
+        stale_worker = cast("Worker[None]", SimpleNamespace(error=error))
+        detail._geometry_worker = stale_worker  # noqa: SLF001
+        detail._active_geometry = (entry.code, app.parts, 1)  # noqa: SLF001
+
+        event = Worker.StateChanged(stale_worker, state)
+        detail._geometry_worker_state_changed(event)  # noqa: SLF001
+
+        assert detail._geometry_worker is None  # noqa: SLF001
+        assert detail._active_geometry is None  # noqa: SLF001
+        metadata = app.query_one("#part-metadata", expect_type=Static)
+        assert f"geometry  unavailable: {reason}" in str(metadata.render())
+
+        detail.show_entry(entry)
+        await wait_for_catalog(app, pilot)
+        assert "connections  4" in str(metadata.render())
+
+
+async def test_late_geometry_result_cannot_clobber_new_request(
+    make_app: Callable[..., PyldrawTuiApp],
+) -> None:
+    app = make_app()
+    async with app.run_test(size=(120, 40)) as pilot:
+        await wait_for_catalog(app, pilot)
+        assert app.parts is not None
+        view = app.query_one("#catalog-view", expect_type=CatalogView)
+        detail = app.query_one("#part-detail", expect_type=PartDetail)
+        entry = view.selected_entry
+        assert entry is not None
+        current_worker = cast("Worker[None]", SimpleNamespace())
+        current_request = (entry.code, app.parts, 2)
+        detail._geometry_worker = current_worker  # noqa: SLF001
+        detail._active_geometry = current_request  # noqa: SLF001
+
+        detail._geometry_finished(  # noqa: SLF001
+            code=entry.code,
+            parts=app.parts,
+            request_id=1,
+            geometry=app.parts.geometry(entry.code),
+            reason=None,
+        )
+
+        assert detail._geometry_worker is current_worker  # noqa: SLF001
+        assert detail._active_geometry == current_request  # noqa: SLF001
+
+
 async def test_part_geometry_failure_is_nonfatal(
     make_app: Callable[..., PyldrawTuiApp],
     monkeypatch: pytest.MonkeyPatch,
@@ -463,6 +658,7 @@ async def test_part_geometry_failure_is_nonfatal(
     async with app.run_test(size=(120, 40)) as pilot:
         await wait_for_catalog(app, pilot)
         assert app.parts is not None
+        original_geometry = app.parts.geometry
 
         def fail_geometry(_code: str) -> Never:
             message = "fixture [/] became unreadable"
@@ -483,6 +679,14 @@ async def test_part_geometry_failure_is_nonfatal(
             summary.render()
         )
         assert "Unexpected geometry failure for 3022" in caplog.text
+
+        monkeypatch.setattr(app.parts, "geometry", original_geometry)
+        view = app.query_one("#catalog-view", expect_type=CatalogView)
+        detail = app.query_one("#part-detail", expect_type=PartDetail)
+        assert view.selected_entry is not None
+        detail.show_entry(view.selected_entry)
+        await wait_for_catalog(app, pilot)
+        assert "connections  2" in str(metadata.render())
 
 
 async def test_part_geometry_requests_are_serialized_and_coalesced(

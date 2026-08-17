@@ -32,7 +32,7 @@ def test_library_missing(tmp_path: Path):
 
 def test_index_missing_then_ready(source: CatalogSource):
     assert source.classify() is SourceState.INDEX_MISSING
-    parts = source.load()
+    parts = source.load().parts
     assert len(parts.catalog.by_code) == 5
     assert source.catalog_db.is_file()
     assert source.classify() is SourceState.READY
@@ -61,9 +61,9 @@ def test_index_stale_on_md5_mismatch(source: CatalogSource, tmp_path: Path):
 
 
 def test_load_reuses_fresh_index(source: CatalogSource):
-    first = source.load()
+    first = source.load().parts
     mtime = source.catalog_db.stat().st_mtime_ns
-    second = source.load()
+    second = source.load().parts
     assert source.catalog_db.stat().st_mtime_ns == mtime
     assert sorted(second.catalog.by_code) == sorted(first.catalog.by_code)
 
@@ -85,8 +85,36 @@ def test_load_retains_catalog_preparation_diagnostics(
         lambda _session, **_kwargs: result,
     )
 
-    assert source.load() is parts
-    assert source.last_diagnostics == (warning,)
+    loaded = source.load()
+
+    assert loaded.parts is parts
+    assert loaded.diagnostics == (warning,)
+
+
+def test_load_uses_error_diagnostic_and_preserves_parts_path(
+    source: CatalogSource,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    warning = Diagnostic(
+        message="catalog index could not be persisted",
+        severity=Severity.WARNING,
+        code=DiagnosticCode.CATALOG_PERSIST_FAILED,
+    )
+    error = Diagnostic(message="catalog unavailable", severity=Severity.ERROR)
+    result = SimpleNamespace(parts=None, diagnostics=(warning, error))
+    monkeypatch.setattr(
+        LDrawSession,
+        "prepare_catalog",
+        lambda _session, **_kwargs: result,
+    )
+
+    with pytest.raises(FileNotFoundError) as excinfo:
+        source.load()
+
+    reason = str(excinfo.value)
+    assert "catalog unavailable" in reason
+    assert warning.message not in reason
+    assert str(source.parts_lst_path) in reason
 
 
 def test_default_config_factory_preserves_connection_sources(
@@ -141,11 +169,15 @@ def test_load_registers_connection_metadata_sources(
         }"""
     )
 
-    parts = CatalogSource(
-        config=fixture_config,
-        connection_shadows=(shadow,),
-        studio_metadata=(studio,),
-    ).load()
+    parts = (
+        CatalogSource(
+            config=fixture_config,
+            connection_shadows=(shadow,),
+            studio_metadata=(studio,),
+        )
+        .load()
+        .parts
+    )
     report = parts.connection_metadata("3901")
 
     assert report.coverage.value == "complete"

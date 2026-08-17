@@ -34,7 +34,7 @@ def fixture_config(tmp_path: Path) -> Config:
 @pytest.fixture
 def parts(fixture_config: Config) -> Parts:
     """Return a fully categorized Parts over the fixture library."""
-    return CatalogSource(config=fixture_config).load()
+    return CatalogSource(config=fixture_config).load().parts
 
 
 @pytest.fixture
