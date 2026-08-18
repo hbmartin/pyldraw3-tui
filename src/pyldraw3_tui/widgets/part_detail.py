@@ -110,7 +110,7 @@ class PartDetail(Vertical):
         self._library_root: Path | None = None
         self._entry: CatalogEntry | None = None
         self._geometry_worker: Worker[None] | None = None
-        self._geometry_request_id = 0
+        self._geometry_request_id: int = 0
         self._active_geometry: tuple[str, Parts, int] | None = None
         self._pending_geometry: tuple[str, Parts] | None = None
         self._displayed_geometry: tuple[str, Parts, PartGeometry] | None = None

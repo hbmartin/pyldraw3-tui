@@ -174,8 +174,8 @@ class PyldrawTuiApp(App[None]):
             return
         self.call_from_thread(
             self._catalog_ready,
-            result.parts,
-            result.diagnostics,
+            parts=result.parts,
+            diagnostics=result.diagnostics,
         )
 
     def _catalog_failed(self, reason: str) -> None:

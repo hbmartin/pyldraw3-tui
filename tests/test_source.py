@@ -117,6 +117,30 @@ def test_load_uses_error_diagnostic_and_preserves_parts_path(
     assert str(source.parts_lst_path) in reason
 
 
+def test_load_without_error_diagnostic_reports_parts_path(
+    source: CatalogSource,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    warning = Diagnostic(
+        message="catalog index could not be persisted",
+        severity=Severity.WARNING,
+        code=DiagnosticCode.CATALOG_PERSIST_FAILED,
+    )
+    result = SimpleNamespace(parts=None, diagnostics=(warning,))
+    monkeypatch.setattr(
+        LDrawSession,
+        "prepare_catalog",
+        lambda _session, **_kwargs: result,
+    )
+
+    with pytest.raises(FileNotFoundError) as excinfo:
+        source.load()
+
+    reason = str(excinfo.value)
+    assert reason == str(source.parts_lst_path)
+    assert warning.message not in reason
+
+
 def test_default_config_factory_preserves_connection_sources(
     fixture_config: Config,
     monkeypatch: pytest.MonkeyPatch,
