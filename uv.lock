@@ -705,7 +705,7 @@ wheels = [
 
 [[package]]
 name = "pyldraw3"
-version = "1.6.0"
+version = "1.7.0"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
     { name = "numpy" },
@@ -715,9 +715,9 @@ dependencies = [
     { name = "pyyaml" },
     { name = "requests" },
 ]
-sdist = { url = "https://files.pythonhosted.org/packages/71/9d/fe8d7f59880df4ee15219fb840520b92c7d2d3e640498ac2132850010fc5/pyldraw3-1.6.0.tar.gz", hash = "sha256:00d947eb8f05c7e2191e7321d5ca78a035ed28e298f3ad1fe6d6a7307050391a", size = 208224, upload-time = "2026-08-04T02:06:11.132Z" }
+sdist = { url = "https://files.pythonhosted.org/packages/3a/70/3aa5efddae419b463df777e46c71af8144d6ac18c3f3e2b976649eff2452/pyldraw3-1.7.0.tar.gz", hash = "sha256:1751eae17cba0dcb6d1c57c546cb308418a7414860aaa2b577081db70ea4a8f8", size = 215110, upload-time = "2026-08-19T14:58:17.713Z" }
 wheels = [
-    { url = "https://files.pythonhosted.org/packages/2b/c9/49ae51567cca63447cbbc1cbc23cc6b2dbcf23aaf2e66235a32281dd61e7/pyldraw3-1.6.0-py3-none-any.whl", hash = "sha256:d2594dbd0a37e9cb75e544a441dfd36ddf3944a88673665538da0ca614a9d2c6", size = 223613, upload-time = "2026-08-04T02:06:09.836Z" },
+    { url = "https://files.pythonhosted.org/packages/6c/21/6fe63f3f5b87f96e57f612bb0dfa8adc72779585543e2a7cdf85d72188dd/pyldraw3-1.7.0-py3-none-any.whl", hash = "sha256:857d5e4304968bd71bdc9228970fb08feb1bfcd3bde8e232e3e507bd42c31245", size = 230174, upload-time = "2026-08-19T14:58:16.239Z" },
 ]
 
 [[package]]
